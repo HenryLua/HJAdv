@@ -2,9 +2,9 @@
   "name": "hjadv",
   "version": "2.0.0",
   "description": "HJ ADV \u2014 Escrit\u00f3rio Digital com IA Gemini + WhatsApp Bot",
-  "main": "server.js",
+  "main": "server .js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server .js"
   },
   "dependencies": {
     "cors": "^2.8.5",
