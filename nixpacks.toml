@@ -2,4 +2,7 @@
 cmds = ["npm install"]
 
 [phases.start]
-cmd = "node server.js"
+cmd = "node server .js"
+
+[variables]
+NIXPACKS_NODE_VERSION = "20"
