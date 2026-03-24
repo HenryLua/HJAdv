@@ -7,6 +7,7 @@ const { createServer } = require("http");
 const { Server } = require("socket.io");
 const multer = require("multer");
 const FormData = require("form-data");
+const QRCode = require("qrcode");
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 // ─── VOLUME PERSISTENTE ───
@@ -78,11 +79,11 @@ function authCliente(req, res, next) {
     const masterToken = hashSenha("master:" + ADMIN_EMAIL.trim().toLowerCase());
     const masterTokenAlt = hashSenha(ADMIN_EMAIL + ADMIN_SENHA);
     const masterTokenAlt2 = hashSenha("master:" + ADMIN_EMAIL);
-    if (token === masterToken || token === masterTokenAlt || token === masterTokenAlt2 || token === "master") {
+    const masterTokenAlt3 = hashSenha("master:" + ADMIN_EMAIL.trim());
+    if (token === masterToken || token === masterTokenAlt || token === masterTokenAlt2 || token === masterTokenAlt3 || token === "master") {
       req.cliente = { id: "master", nome: "Administrador", ativo: 1, validade: null };
       return next();
     }
-    console.log("master auth falhou:", { tokenRecebido: token?.slice(0,10), esperado: masterToken?.slice(0,10) });
     return res.status(401).json({ error: "Acesso negado." });
   }
   if (!cliente_id || !token) return res.status(401).json({ error: "Não autenticado." });
@@ -98,7 +99,7 @@ function authCliente(req, res, next) {
 function authAdmin(req, res, next) {
   const { admin_email, admin_senha } = req.headers;
   const emailOk = (admin_email || "").trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase();
-  const senhaOk = (admin_senha || "").trim() === ADMIN_SENHA.trim();
+  const senhaOk = (admin_senha || "").trim().toLowerCase() === ADMIN_SENHA.trim().toLowerCase();
   if (!emailOk || !senhaOk) {
     return res.status(401).json({ error: "Acesso admin negado." });
   }
@@ -112,9 +113,9 @@ function authAdmin(req, res, next) {
 app.post("/api/auth/master-token", (req, res) => {
   const { email, senha } = req.body;
   const emailOk = (email||"").trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase();
-  const senhaOk = (senha||"").trim() === ADMIN_SENHA.trim();
-  console.log("master-token:", { emailOk, senhaOk, emailRecebido: (email||"").trim().toLowerCase(), emailEsperado: ADMIN_EMAIL.trim().toLowerCase() });
+  const senhaOk = (senha||"").trim().toLowerCase() === ADMIN_SENHA.trim().toLowerCase();
   if (!emailOk || !senhaOk) {
+    console.log("master-token falhou:", { emailOk, senhaOk });
     return res.status(401).json({ error: "Credenciais inválidas." });
   }
   const token = hashSenha("master:" + ADMIN_EMAIL.trim().toLowerCase());
@@ -286,10 +287,9 @@ async function iniciarWA(cliente_id) {
     waSessions[cliente_id] = { sock, status: "aguardando_qr", qr: null };
 
     sock.ev.on("creds.update", saveCreds);
-    sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
+    sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
       if (qr) {
         try {
-          const QRCode = require("qrcode");
           const qrDataUrl = await QRCode.toDataURL(qr);
           waSessions[cliente_id].qr = qrDataUrl;
           waSessions[cliente_id].status = "aguardando_qr";
