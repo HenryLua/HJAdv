@@ -24,7 +24,9 @@ const API_URL="/api/ia";
 const C={navy:"#0B1F3A",gold:"#C9A84C",gold3:"#a8872e",cream:"#F5F0E8",white:"#fff",gray:"#8A9BB0",gray2:"#E8EDF4",red:"#C0392B",green:"#1A7A4A",blue:"#2980B9",purple:"#8E44AD",orange:"#e67e22",text:"#1C2B3A"};
 const AREAS=["Civil","Penal","Processual Civil","Processual Penal","Família","Trânsito","Trabalhista","Administrativo","Pareceres"];
 const STATUS_PROC=["Em andamento","Aguardando audiência","Aguardando sentença","Recurso","Concluído","Arquivado"];
-const TIPOS_FIN=["Honorários","Aporte","Pagamento Dativo","Nota Fiscal","Despesa","Outros"];
+const TIPOS_FIN=["Honorários","Aporte","Pagamento Dativo","Nota Fiscal Emitida","Outros Recebimentos","Despesa Operacional","Despesa com Pessoal","Despesa Tributária","Nota Fiscal Recebida","Pró-Labore"];
+const TIPOS_ENTRADA=["Honorários","Aporte","Pagamento Dativo","Nota Fiscal Emitida","Outros Recebimentos"];
+const TIPOS_SAIDA=["Despesa Operacional","Despesa com Pessoal","Despesa Tributária","Nota Fiscal Recebida","Pró-Labore"];
 const LEGS=["Código Penal","Código de Processo Penal","Código Civil","Código de Processo Civil","CLT","Constituição Federal","ECA","CDC","Lei Maria da Penha","CTB"];
 const DOUTS=["Nucci","Didier","Tartuce","Moraes","Capez","Lenza","Gonçalves","Marinoni","Greco","Barroso"];
 const SUMS=["Súmula 231 STJ","Súmula 7 STJ","Súmula 83 STJ","Súmula 11 STF","Súmula 14 STF","Súmula Vinculante 14","Súmula 421 STJ","Súmula 510 STJ"];
@@ -477,8 +479,8 @@ function bindLogin(){
 }
 
 // ── LAYOUT ──
-const MENU_ADMIN=[{id:"dashboard",l:"Painel",i:"🏛",s:null},{id:"clientes",l:"Clientes",i:"👤",s:"EQUIPE"},{id:"advogados",l:"Advogados",i:"⚖️",s:null},{id:"estagiarios",l:"Estagiários",i:"📚",s:null},{id:"processos",l:"Processos",i:"📋",s:"JURÍDICO"},{id:"prazos",l:"Prazos",i:"⏰",s:null},{id:"juris",l:"Jurisprudências",i:"📖",s:null},{id:"financeiro",l:"Financeiro",i:"💰",s:"GESTÃO"},{id:"pecas",l:"Peças Processuais",i:"📄",s:null},{id:"videochamada",l:"Videochamada",i:"📹",s:null},{id:"roteiros",l:"Roteiros",i:"🗣️",s:"CAPTAÇÃO"},{id:"captacao",l:"Captação WA",i:"📱",s:null},{id:"degravacao",l:"Degravação IA",i:"🎙️",s:"IA"},{id:"ia",l:"Assistente IA",i:"🤖",s:null},{id:"whatsapp",l:"Bot WhatsApp",i:"💬",s:"COMUNICAÇÃO"},{id:"config",l:"Configurações",i:"⚙️",s:"SISTEMA"}];
-const MENU_USER=[{id:"dashboard",l:"Painel",i:"🏛",s:null},{id:"processos",l:"Processos",i:"📋",s:"JURÍDICO"},{id:"prazos",l:"Prazos",i:"⏰",s:null},{id:"juris",l:"Jurisprudências",i:"📖",s:null},{id:"pecas",l:"Peças Processuais",i:"📄",s:null},{id:"videochamada",l:"Videochamada",i:"📹",s:null},{id:"degravacao",l:"Degravação IA",i:"🎙️",s:"FERRAMENTAS"},{id:"ia",l:"Assistente IA",i:"🤖",s:null}];
+const MENU_ADMIN=[{id:"dashboard",l:"Painel",i:"🏛",s:null},{id:"clientes",l:"Clientes",i:"👤",s:"EQUIPE"},{id:"advogados",l:"Advogados",i:"⚖️",s:null},{id:"estagiarios",l:"Estagiários",i:"📚",s:null},{id:"processos",l:"Processos",i:"📋",s:"JURÍDICO"},{id:"prazos",l:"Prazos",i:"⏰",s:null},{id:"juris",l:"Jurisprudências",i:"📖",s:null},{id:"financeiro",l:"Financeiro",i:"💰",s:"GESTÃO"},{id:"saude",l:"Saúde Financeira",i:"📊",s:null},{id:"pecas",l:"Peças Processuais",i:"📄",s:null},{id:"videochamada",l:"Videochamada",i:"📹",s:null},{id:"roteiros",l:"Roteiros",i:"🗣️",s:"CAPTAÇÃO"},{id:"captacao",l:"Captação WA",i:"📱",s:null},{id:"degravacao",l:"Degravação IA",i:"🎙️",s:"IA"},{id:"ia",l:"Assistente IA",i:"🤖",s:null},{id:"whatsapp",l:"Bot WhatsApp",i:"💬",s:"COMUNICAÇÃO"},{id:"config",l:"Configurações",i:"⚙️",s:"SISTEMA"}];
+const MENU_USER=[{id:"dashboard",l:"Painel",i:"🏛",s:null},{id:"processos",l:"Processos",i:"📋",s:"JURÍDICO"},{id:"prazos",l:"Prazos",i:"⏰",s:null},{id:"juris",l:"Jurisprudências",i:"📖",s:null},{id:"saude",l:"Saúde Financeira",i:"📊",s:null},{id:"pecas",l:"Peças Processuais",i:"📄",s:null},{id:"videochamada",l:"Videochamada",i:"📹",s:null},{id:"degravacao",l:"Degravação IA",i:"🎙️",s:"FERRAMENTAS"},{id:"ia",l:"Assistente IA",i:"🤖",s:null}];
 
 function renderLayout(){
   const menu=(SESS.role==="admin"||SESS.role==="master")?MENU_ADMIN:MENU_USER;
@@ -518,7 +520,7 @@ function bindNav(){
 }
 function renderPage(){
   const pg=document.getElementById("pagina");
-  const pages={dashboard:pgDashboard,advogados:pgAdvogados,estagiarios:pgEstagiarios,clientes:pgClientes,processos:pgProcessos,prazos:pgPrazos,juris:pgJuris,financeiro:pgFinanceiro,pecas:pgPecas,videochamada:pgVideochamada,roteiros:pgRoteiros,captacao:pgCaptacao,degravacao:pgDegravacao,ia:pgIA,whatsapp:pgWhatsApp,config:pgConfig};
+  const pages={dashboard:pgDashboard,advogados:pgAdvogados,estagiarios:pgEstagiarios,clientes:pgClientes,processos:pgProcessos,prazos:pgPrazos,juris:pgJuris,financeiro:pgFinanceiro,saude:pgSaudeFinanceira,pecas:pgPecas,videochamada:pgVideochamada,roteiros:pgRoteiros,captacao:pgCaptacao,degravacao:pgDegravacao,ia:pgIA,whatsapp:pgWhatsApp,config:pgConfig};
   if(pages[ABA]) pages[ABA](pg);
   else pgDashboard(pg);
 }
@@ -771,13 +773,17 @@ function abrirFormFin(cb){
         <option value="">— Selecione —</option>
         <optgroup label="💚 Entradas">
           <option value="Honorários">Honorários</option>
-          <option value="Aporte">Aporte</option>
+          <option value="Aporte">Aporte de Sócio</option>
           <option value="Pagamento Dativo">Pagamento Dativo</option>
-          <option value="Nota Fiscal">Nota Fiscal</option>
-          <option value="Outros">Outros</option>
+          <option value="Nota Fiscal Emitida">Nota Fiscal Emitida</option>
+          <option value="Outros Recebimentos">Outros Recebimentos</option>
         </optgroup>
         <optgroup label="🔴 Saídas">
-          <option value="Despesa">Despesa</option>
+          <option value="Despesa Operacional">Despesa Operacional</option>
+          <option value="Despesa com Pessoal">Despesa com Pessoal</option>
+          <option value="Despesa Tributária">Despesa Tributária</option>
+          <option value="Nota Fiscal Recebida">Nota Fiscal Recebida</option>
+          <option value="Pró-Labore">Pró-Labore</option>
         </optgroup>
       </select>
     </div>
@@ -818,7 +824,7 @@ function abrirFormFin(cb){
     const vl=parseFloat(document.getElementById("ffval").value);
     const tipo=document.getElementById("fftipo2").value;
     if(!document.getElementById("ffdata").value||!tipo||isNaN(vl)||vl<=0)return alert("Data, tipo e valor são obrigatórios.");
-    const neg=tipo==="Despesa";
+    const neg=TIPOS_SAIDA.includes(tipo);
     DB.financeiro.push({
       id:uid(),
       data:document.getElementById("ffdata").value,
@@ -846,7 +852,7 @@ function pgJuris(el){
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:13px;">
       ${fil.map(j=>`<div style="background:#fff;border-radius:11px;box-shadow:0 2px 10px rgba(11,31,58,.05);border:1px solid ${C.gray2};padding:18px;display:flex;flex-direction:column;gap:7px;">
-        <div style="display:flex;justify-content:space-between;">${badge(j.area||"Geral")}<div style="display:flex;gap:4px;">${btn("×","jdel-"+j.id,"danger",true)}</div></div>
+        <div style="display:flex;justify-content:space-between;">${badge(j.area||"Geral")}<div style="display:flex;gap:4px;"><button id="jexp-${j.id}" style="padding:2px 7px;background:${C.gold}18;color:${C.gold3};border:1px solid ${C.gold}40;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700;">→ Peça</button>${btn("×","jdel-"+j.id,"danger",true)}</div></div>
         <div style="font-weight:700;font-size:13px;color:${C.navy};line-height:1.4;">${j.tit}</div>
         <div style="font-family:sans-serif;font-size:10px;color:${C.gold3};font-weight:700;">${j.trib}${j.num?` · ${j.num}`:""}</div>
         <div style="font-family:sans-serif;font-size:11px;color:${C.gray};line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${j.em}</div>
@@ -858,6 +864,7 @@ function pgJuris(el){
     document.getElementById("jfarea").onchange=e=>{fArea=e.target.value;draw();};
     document.getElementById("jnova").onclick=()=>abrirFormJuris(draw);
     document.querySelectorAll("[id^='jdel-']").forEach(b=>{b.onclick=()=>{const id=b.id.replace("jdel-","");if(confirm("Excluir?"))DB.juris=DB.juris.filter(x=>x.id!=id),saveDB(),draw();};});
+    document.querySelectorAll("[id^='jexp-']").forEach(b=>{b.onclick=()=>{const id=b.id.replace("jexp-","");const j=DB.juris.find(x=>x.id==id);if(j)exportarJurisPecas(j);};});
   }
   draw();
 }
@@ -1814,11 +1821,15 @@ function pgRoteiros(el) {
   let areaSel = null, subareaSel = null, etapa = "inicio";
 
   function draw() {
+    if (etapa === "gatilhos") { drawGatilhos(); return; }
     if (etapa === "inicio") {
       el.innerHTML = `
-      <div style="margin-bottom:18px;">
-        <h1 style="font-size:22px;color:${C.navy};">🗣️ Roteiros de Atendimento</h1>
-        <p style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-top:3px;">Scripts com gatilhos emocionais para captação de clientes por área do Direito</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+        <div>
+          <h1 style="font-size:22px;color:${C.navy};">🗣️ Roteiros de Atendimento</h1>
+          <p style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-top:3px;">Scripts com gatilhos emocionais para captação de clientes por área do Direito</p>
+        </div>
+        <button id="btn-gatilhos" style="padding:9px 16px;background:${C.navy};color:${C.gold};border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;">🧠 Gerador de Gatilhos</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
         ${Object.entries(ROTEIROS).map(([area, dados]) => `
@@ -1833,6 +1844,7 @@ function pgRoteiros(el) {
       document.querySelectorAll("[data-area]").forEach(b => {
         b.onclick = () => { areaSel = b.dataset.area; etapa = "area"; draw(); };
       });
+      document.getElementById("btn-gatilhos").onclick = () => { etapa = "gatilhos"; draw(); };
     }
 
     else if (etapa === "area") {
@@ -2320,3 +2332,513 @@ function abrirFormBriefing(cliente, cb) {
 </script>
 </body>
 </html>
+<script>
+// ═══════════════════════════════════════
+// SAÚDE FINANCEIRA — BALANCETE E DRE
+// ═══════════════════════════════════════
+function pgSaudeFinanceira(el) {
+  const fin = DB.financeiro || [];
+  const now = new Date();
+  const mesAtual = now.getMonth() + 1;
+  const anoAtual = now.getFullYear();
+
+  // Filtrar por período
+  function filtrarPeriodo(mes, ano) {
+    if (!mes && !ano) return fin;
+    return fin.filter(f => {
+      if (!f.data) return false;
+      const [y, m] = f.data.split("-").map(Number);
+      return (!ano || y === ano) && (!mes || m === mes);
+    });
+  }
+
+  // Calcular totais por categoria
+  function calcTotais(items) {
+    const entradas = items.filter(f => f.valor > 0);
+    const saidas = items.filter(f => f.valor < 0);
+    const totalEnt = entradas.reduce((a, f) => a + f.valor, 0);
+    const totalSai = saidas.reduce((a, f) => a + Math.abs(f.valor), 0);
+    const lucro = totalEnt - totalSai;
+    const margem = totalEnt > 0 ? (lucro / totalEnt * 100) : 0;
+
+    // Agrupar por tipo
+    const porTipo = {};
+    items.forEach(f => {
+      if (!porTipo[f.tipo]) porTipo[f.tipo] = 0;
+      porTipo[f.tipo] += f.valor;
+    });
+
+    return { entradas, saidas, totalEnt, totalSai, lucro, margem, porTipo };
+  }
+
+  // Últimos 6 meses para gráfico
+  function ultimos6Meses() {
+    const meses = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(anoAtual, mesAtual - 1 - i, 1);
+      const m = d.getMonth() + 1;
+      const y = d.getFullYear();
+      const items = filtrarPeriodo(m, y);
+      const { totalEnt, totalSai, lucro } = calcTotais(items);
+      const nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+      meses.push({ label: nomes[m-1]+"/"+String(y).slice(2), totalEnt, totalSai, lucro });
+    }
+    return meses;
+  }
+
+  const todosTotais = calcTotais(fin);
+  const mesTotais = calcTotais(filtrarPeriodo(mesAtual, anoAtual));
+  const meses6 = ultimos6Meses();
+  const maxVal = Math.max(...meses6.map(m => Math.max(m.totalEnt, m.totalSai)), 1);
+
+  // Indicadores de saúde
+  const saudeScore = mesTotais.margem >= 40 ? "Excelente" : mesTotais.margem >= 20 ? "Boa" : mesTotais.margem >= 0 ? "Regular" : "Atenção";
+  const saudeColor = mesTotais.margem >= 40 ? C.green : mesTotais.margem >= 20 ? C.blue : mesTotais.margem >= 0 ? C.orange : C.red;
+
+  el.innerHTML = `
+  <div style="margin-bottom:18px;">
+    <h1 style="font-size:22px;color:${C.navy};">📊 Saúde Financeira</h1>
+    <p style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-top:3px;">Balancete, DRE e indicadores do escritório</p>
+  </div>
+
+  <!-- INDICADORES PRINCIPAIS -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:16px;">
+    ${[
+      {l:"Receita Total",v:fmtR(todosTotais.totalEnt),i:"💰",c:C.green,s:"Acumulado"},
+      {l:"Despesas Total",v:fmtR(todosTotais.totalSai),i:"📤",c:C.red,s:"Acumulado"},
+      {l:"Resultado Líquido",v:fmtR(todosTotais.lucro),i:"💼",c:todosTotais.lucro>=0?C.navy:C.red,s:"Acumulado"},
+      {l:"Saúde do Mês",v:saudeScore,i:"❤️",c:saudeColor,s:"Margem: "+mesTotais.margem.toFixed(1)+"%"}
+    ].map(x=>`
+    <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:14px;display:flex;align-items:center;gap:10px;">
+      <div style="width:36px;height:36px;border-radius:8px;background:${x.c}15;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">${x.i}</div>
+      <div>
+        <div style="font-size:14px;font-weight:800;color:${x.c};">${x.v}</div>
+        <div style="font-size:9px;color:${C.gray};font-family:sans-serif;text-transform:uppercase;">${x.l}</div>
+        <div style="font-size:9px;color:${C.gray};font-family:sans-serif;">${x.s}</div>
+      </div>
+    </div>`).join("")}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+
+    <!-- GRÁFICO 6 MESES -->
+    <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;">
+      <div style="font-size:13px;font-weight:700;color:${C.navy};margin-bottom:14px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">📈 Últimos 6 Meses</div>
+      <div style="display:flex;align-items:flex-end;gap:6px;height:120px;margin-bottom:8px;">
+        ${meses6.map(m => {
+          const hEnt = Math.max((m.totalEnt / maxVal * 100), 2);
+          const hSai = Math.max((m.totalSai / maxVal * 100), 2);
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <div style="display:flex;gap:1px;align-items:flex-end;height:100px;">
+              <div style="width:10px;height:${hEnt}px;background:${C.green};border-radius:2px 2px 0 0;" title="Entradas: ${fmtR(m.totalEnt)}"></div>
+              <div style="width:10px;height:${hSai}px;background:${C.red};border-radius:2px 2px 0 0;" title="Saídas: ${fmtR(m.totalSai)}"></div>
+            </div>
+            <div style="font-size:8px;color:${C.gray};font-family:sans-serif;">${m.label}</div>
+          </div>`;
+        }).join("")}
+      </div>
+      <div style="display:flex;gap:12px;font-family:sans-serif;font-size:10px;color:${C.gray};">
+        <span>🟢 Entradas</span><span>🔴 Saídas</span>
+      </div>
+    </div>
+
+    <!-- DRE DO MÊS -->
+    <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;">
+      <div style="font-size:13px;font-weight:700;color:${C.navy};margin-bottom:14px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">📋 DRE — Mês Atual</div>
+      ${mesTotais.totalEnt === 0 && mesTotais.totalSai === 0
+        ? `<div style="text-align:center;padding:20px;font-family:sans-serif;font-size:12px;color:${C.gray};">Nenhum lançamento neste mês.</div>`
+        : `
+      <div style="font-family:sans-serif;font-size:12px;">
+        <div style="font-weight:700;color:${C.green};margin-bottom:8px;">RECEITAS</div>
+        ${Object.entries(mesTotais.porTipo).filter(([k,v])=>v>0).map(([k,v])=>`
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid ${C.gray2};">
+          <span style="color:${C.text};">${k}</span>
+          <span style="color:${C.green};font-weight:600;">${fmtR(v)}</span>
+        </div>`).join("")}
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:800;border-top:2px solid ${C.green};margin-top:4px;">
+          <span>Total Receitas</span><span style="color:${C.green};">${fmtR(mesTotais.totalEnt)}</span>
+        </div>
+        <div style="font-weight:700;color:${C.red};margin:10px 0 8px;">DESPESAS</div>
+        ${Object.entries(mesTotais.porTipo).filter(([k,v])=>v<0).map(([k,v])=>`
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid ${C.gray2};">
+          <span style="color:${C.text};">${k}</span>
+          <span style="color:${C.red};font-weight:600;">${fmtR(Math.abs(v))}</span>
+        </div>`).join("")}
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:800;border-top:2px solid ${C.red};margin-top:4px;">
+          <span>Total Despesas</span><span style="color:${C.red};">${fmtR(mesTotais.totalSai)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 10px;background:${mesTotais.lucro>=0?C.green:C.red}15;border-radius:7px;margin-top:8px;font-weight:800;font-size:13px;">
+          <span>RESULTADO LÍQUIDO</span>
+          <span style="color:${mesTotais.lucro>=0?C.green:C.red};">${fmtR(mesTotais.lucro)}</span>
+        </div>
+      </div>`}
+    </div>
+  </div>
+
+  <!-- BALANCETE ACUMULADO -->
+  <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;margin-bottom:14px;">
+    <div style="font-size:13px;font-weight:700;color:${C.navy};margin-bottom:14px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">📊 Balancete Acumulado por Categoria</div>
+    ${fin.length === 0
+      ? `<div style="text-align:center;padding:20px;font-family:sans-serif;font-size:12px;color:${C.gray};">Nenhum lançamento registrado.</div>`
+      : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:${C.green};margin-bottom:8px;text-transform:uppercase;">💚 Entradas por Categoria</div>
+        ${Object.entries(todosTotais.porTipo).filter(([k,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>{
+          const pct = todosTotais.totalEnt > 0 ? (v/todosTotais.totalEnt*100) : 0;
+          return `<div style="margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;font-family:sans-serif;font-size:11px;margin-bottom:3px;">
+              <span style="color:${C.text};">${k}</span>
+              <span style="color:${C.green};font-weight:600;">${fmtR(v)}</span>
+            </div>
+            <div style="background:${C.gray2};border-radius:3px;height:5px;">
+              <div style="background:${C.green};border-radius:3px;height:5px;width:${pct}%;"></div>
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:${C.red};margin-bottom:8px;text-transform:uppercase;">🔴 Saídas por Categoria</div>
+        ${Object.entries(todosTotais.porTipo).filter(([k,v])=>v<0).sort((a,b)=>a[1]-b[1]).map(([k,v])=>{
+          const pct = todosTotais.totalSai > 0 ? (Math.abs(v)/todosTotais.totalSai*100) : 0;
+          return `<div style="margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;font-family:sans-serif;font-size:11px;margin-bottom:3px;">
+              <span style="color:${C.text};">${k}</span>
+              <span style="color:${C.red};font-weight:600;">${fmtR(Math.abs(v))}</span>
+            </div>
+            <div style="background:${C.gray2};border-radius:3px;height:5px;">
+              <div style="background:${C.red};border-radius:3px;height:5px;width:${pct}%;"></div>
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`}
+  </div>
+
+  <!-- DIAGNÓSTICO IA -->
+  <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">
+      <div style="font-size:13px;font-weight:700;color:${C.navy};">🤖 Diagnóstico Financeiro com IA</div>
+      ${btn("Analisar","sf-analisar")}
+    </div>
+    <div id="sf-diagnostico" style="font-family:sans-serif;font-size:12px;color:${C.gray};line-height:1.7;">
+      Clique em "Analisar" para obter um diagnóstico completo da saúde financeira do escritório com recomendações da IA.
+    </div>
+  </div>`;
+
+  document.getElementById("sf-analisar").onclick = async () => {
+    const out = document.getElementById("sf-diagnostico");
+    document.getElementById("sf-analisar").textContent = "Analisando...";
+    out.style.color = C.gray;
+    out.textContent = "⏳ Analisando dados financeiros...";
+    try {
+      const resumo = `Escritório de advocacia. Dados financeiros acumulados:
+- Receita total: ${fmtR(todosTotais.totalEnt)}
+- Despesas totais: ${fmtR(todosTotais.totalSai)}
+- Resultado líquido: ${fmtR(todosTotais.lucro)}
+- Margem do mês atual: ${mesTotais.margem.toFixed(1)}%
+- Categorias de receita: ${Object.entries(todosTotais.porTipo).filter(([k,v])=>v>0).map(([k,v])=>k+": "+fmtR(v)).join(", ")||"Nenhuma"}
+- Categorias de despesa: ${Object.entries(todosTotais.porTipo).filter(([k,v])=>v<0).map(([k,v])=>k+": "+fmtR(Math.abs(v))).join(", ")||"Nenhuma"}
+- Últimos 6 meses: ${meses6.map(m=>m.label+": "+fmtR(m.lucro)).join(", ")}`;
+
+      const r = await apiIA(
+        "Você é consultor financeiro especializado em escritórios de advocacia. Faça um diagnóstico objetivo e prático.",
+        [{ role: "user", content: `Analise a saúde financeira deste escritório e forneça: 1) Diagnóstico geral, 2) Pontos de atenção, 3) Recomendações práticas para melhorar o resultado.\n\n${resumo}` }]
+      );
+      out.style.color = C.text;
+      out.textContent = r;
+    } catch(e) {
+      out.style.color = C.red;
+      out.textContent = "❌ " + e.message;
+    }
+    document.getElementById("sf-analisar").textContent = "Analisar";
+  };
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════
+// GERADOR DE GATILHOS EMOCIONAIS (dentro de pgRoteiros)
+// ═══════════════════════════════════════
+function drawGatilhos() {
+  const el = document.getElementById("pagina");
+
+  // Base neurocientífica
+  const NEUROS = {
+    "Damásio": {
+      desc: "Decisões são emocionais antes de racionais. O cliente decide pelo sentimento, justifica pela razão.",
+      principio: "Ative a dor presente antes de apresentar qualquer solução."
+    },
+    "Cialdini": {
+      desc: "Reciprocidade, autoridade, prova social e escassez são os pilares da influência ética.",
+      principio: "Demonstre autoridade pelo conhecimento, não pela pressão."
+    },
+    "Ekman": {
+      desc: "Medo, tristeza e surpresa são emoções primárias que ativam busca por segurança.",
+      principio: "Transforme o medo em consciência, não em pânico."
+    },
+    "Kahneman": {
+      desc: "O sistema emocional (rápido) decide; o racional (lento) justifica depois.",
+      principio: "Fale primeiro para o sistema emocional, depois apresente os fatos."
+    }
+  };
+
+  const GATILHOS_BASE = {
+    "Família": {
+      frases: [
+        "Quando a família enfrenta uma ruptura, o silêncio jurídico pode custar o que você mais valoriza.",
+        "Você tem o direito de proteger seus filhos — e esse direito não espera.",
+        "Muitas pessoas só procuram orientação depois que perderam algo que podiam ter preservado.",
+        "A estabilidade emocional começa quando você entende quais são seus direitos.",
+        "Conhecer suas opções não compromete a relação — protege o que ainda pode ser protegido."
+      ],
+      neuro: "Damásio + Ekman",
+      etica: "Não promete resultado. Ativa consciência da necessidade sem criar pânico."
+    },
+    "Trabalhista": {
+      frases: [
+        "Cada dia sem orientação pode significar um direito que prescreve silenciosamente.",
+        "Muitos trabalhadores desconhecem que verbas não pagas têm prazo legal para serem cobradas.",
+        "Saber o que você tem direito não é agressividade — é consciência.",
+        "A relação de trabalho termina, mas os direitos dela permanecem por até dois anos.",
+        "Quem conhece seus direitos não precisa aceitar menos do que merece."
+      ],
+      neuro: "Cialdini (autoridade) + Kahneman",
+      etica: "Informa sem pressionar. Cria urgência pelo prazo legal, não pela emoção."
+    },
+    "Criminal": {
+      frases: [
+        "Uma acusação sem defesa técnica é como uma balança com apenas um lado.",
+        "O momento em que você é investigado é o momento em que a orientação jurídica mais importa.",
+        "Direitos não exercidos no momento certo podem não ser exercidos nunca.",
+        "Silêncio sem orientação e silêncio com orientação são decisões completamente diferentes.",
+        "Ninguém deveria enfrentar o sistema penal sem entender onde está pisando."
+      ],
+      neuro: "Ekman (medo → segurança) + Damásio",
+      etica: "Não gera pânico. Transfere o foco para proteção e consciência."
+    },
+    "Trânsito": {
+      frases: [
+        "Uma multa não contestada não é apenas um pagamento — é um precedente.",
+        "Muitas infrações têm vícios que tornam o auto nulo. Você sabia disso?",
+        "Perder a habilitação pode afetar muito mais do que sua liberdade de dirigir.",
+        "Contestar não é negar o erro — é garantir que o processo foi feito corretamente.",
+        "Conhecer o prazo de recurso pode ser a diferença entre pagar e não pagar."
+      ],
+      neuro: "Cialdini (reciprocidade via informação) + Kahneman",
+      etica: "Informa sobre possibilidades legais sem prometer anulação."
+    },
+    "Cível": {
+      frases: [
+        "Prejuízos não comunicados juridicamente tendem a se tornar prejuízos definitivos.",
+        "Você não precisa aceitar um dano como parte da experiência.",
+        "A lei prevê reparação para situações que muitas pessoas simplesmente absorvem.",
+        "Saber se você tem um direito não obriga você a nada — mas não saber pode custar muito.",
+        "Muitas pessoas desistem antes de entender o que a lei garante para elas."
+      ],
+      neuro: "Damásio + Kahneman",
+      etica: "Incentiva busca por informação, não promete vitória."
+    },
+    "Previdenciário": {
+      frases: [
+        "Anos de contribuição merecem o benefício correto — nem mais, nem menos.",
+        "O INSS processa centenas de pedidos por dia. Uma análise individualizada faz diferença.",
+        "Muitos benefícios são negados administrativamente e revertidos na via correta.",
+        "Conhecer seus direitos previdenciários é parte do planejamento de vida, não uma emergência.",
+        "A negativa do INSS é um posicionamento inicial — não uma decisão definitiva."
+      ],
+      neuro: "Cialdini (autoridade) + Damásio",
+      etica: "Não promete reversão. Posiciona a negativa como ponto de partida, não de chegada."
+    }
+  };
+
+  el.innerHTML = `
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+    <button id="voltar-gat" style="padding:6px 12px;background:transparent;border:1.5px solid ${C.gray2};border-radius:7px;cursor:pointer;font-size:12px;">← Roteiros</button>
+    <div>
+      <h1 style="font-size:20px;color:${C.navy};">🧠 Gerador de Gatilhos Emocionais</h1>
+      <p style="font-family:sans-serif;font-size:11px;color:${C.gray};">Baseado em Damásio, Cialdini, Ekman e Kahneman · Dentro da ética OAB</p>
+    </div>
+  </div>
+
+  <!-- AVISO OAB -->
+  <div style="background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);border-radius:9px;padding:12px 16px;margin-bottom:16px;font-family:sans-serif;font-size:11px;color:${C.gold3};line-height:1.7;">
+    ⚖️ <strong>Conformidade OAB:</strong> Todas as frases abaixo foram construídas para informar e conscientizar o cliente, sem prometer resultado, sem oferecer serviço de forma direta e sem captação vedada pelo Código de Ética da OAB (Art. 29 e 34, XVII).
+  </div>
+
+  <!-- BASE NEUROCIENTÍFICA -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+    ${Object.entries(NEUROS).map(([nome, dados]) => `
+    <div style="background:#fff;border-radius:9px;border:1px solid ${C.gray2};padding:13px;">
+      <div style="font-size:12px;font-weight:700;color:${C.navy};margin-bottom:5px;">📚 ${nome}</div>
+      <div style="font-family:sans-serif;font-size:10px;color:${C.gray};line-height:1.6;margin-bottom:6px;">${dados.desc}</div>
+      <div style="font-family:sans-serif;font-size:10px;color:${C.gold3};font-style:italic;line-height:1.5;">"${dados.principio}"</div>
+    </div>`).join("")}
+  </div>
+
+  <!-- GATILHOS POR MATÉRIA -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+    ${Object.entries(GATILHOS_BASE).map(([materia, dados]) => `
+    <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:18px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">
+        <div style="font-size:13px;font-weight:700;color:${C.navy};">${materia}</div>
+        <span style="font-size:9px;color:${C.gray};font-family:sans-serif;background:${C.gray2};padding:2px 7px;border-radius:4px;">${dados.neuro}</span>
+      </div>
+      <div style="margin-bottom:10px;">
+        ${dados.frases.map((f, i) => `
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid ${C.gray2};">
+          <span style="color:${C.gold};font-size:10px;margin-top:2px;">●</span>
+          <span style="font-family:sans-serif;font-size:11px;color:${C.text};line-height:1.6;flex:1;font-style:italic;">"${f}"</span>
+          <button onclick="navigator.clipboard?.writeText('${f.replace(/'/g,"\\'")}');this.textContent='✓';setTimeout(()=>this.textContent='📋',1500)" style="padding:2px 5px;background:${C.gray2};border:none;border-radius:4px;cursor:pointer;font-size:10px;flex-shrink:0;">📋</button>
+        </div>`).join("")}
+      </div>
+      <div style="font-family:sans-serif;font-size:10px;color:${C.green};background:${C.green}10;border-radius:5px;padding:5px 8px;">✅ ${dados.etica}</div>
+    </div>`).join("")}
+  </div>
+
+  <!-- GERADOR PERSONALIZADO COM IA -->
+  <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;">
+    <div style="font-size:13px;font-weight:700;color:${C.navy};margin-bottom:12px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">🤖 Gerador Personalizado com IA</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div>
+        <label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;text-transform:uppercase;">Matéria</label>
+        <select id="gat-materia" style="width:100%;padding:8px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;">
+          ${["Família","Trabalhista","Criminal","Trânsito","Cível","Previdenciário","Empresarial","Imobiliário","Tributário"].map(m=>`<option>${m}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;text-transform:uppercase;">Perfil do Cliente</label>
+        <select id="gat-perfil" style="width:100%;padding:8px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;">
+          ${["Pessoa física - classe média","Pessoa física - baixa renda","Empresário - pequeno porte","Profissional liberal","Idoso","Jovem adulto","Mãe com filhos"].map(p=>`<option>${p}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;text-transform:uppercase;">Situação específica (opcional)</label>
+      <input id="gat-situacao" placeholder="Ex: demitido após 10 anos de empresa, filho em disputa de guarda, multa por excesso de velocidade..." style="width:100%;padding:8px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;box-sizing:border-box;"/>
+    </div>
+    <button id="gat-gerar" style="padding:10px 20px;background:${C.navy};color:${C.gold};border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;margin-bottom:12px;">🧠 Gerar Gatilhos Personalizados</button>
+    <div id="gat-out" style="font-family:sans-serif;font-size:12px;color:${C.gray};line-height:1.8;white-space:pre-wrap;"></div>
+  </div>`;
+
+  document.getElementById("voltar-gat").onclick = () => {
+    // Voltar para pgRoteiros
+    ABA = "roteiros"; render();
+  };
+
+  document.getElementById("gat-gerar").onclick = async () => {
+    const materia = document.getElementById("gat-materia").value;
+    const perfil = document.getElementById("gat-perfil").value;
+    const situacao = document.getElementById("gat-situacao").value;
+    const out = document.getElementById("gat-out");
+    document.getElementById("gat-gerar").textContent = "Gerando...";
+    out.style.color = C.gray;
+    out.textContent = "⏳ Gerando gatilhos personalizados...";
+    try {
+      const r = await apiIA(
+        `Você é especialista em comunicação jurídica ética, com base nos estudos de António Damásio (neurociência da decisão emocional), Robert Cialdini (influência e persuasão ética), Paul Ekman (emoções e confiança) e Daniel Kahneman (sistema 1 e sistema 2 de decisão).
+
+REGRAS OBRIGATÓRIAS (Código de Ética OAB):
+- NUNCA prometa resultado ou sucesso no caso
+- NUNCA ofereça o serviço diretamente (sem "contrate-nos", "nosso escritório resolve")
+- NUNCA crie pânico ou medo excessivo
+- Foque em INFORMAR e CONSCIENTIZAR o cliente sobre seus direitos
+- Use linguagem que ativa a percepção da necessidade, não a pressão`,
+        [{
+          role: "user",
+          content: `Gere 8 frases de gatilho emocional para abordagem na área de ${materia}.
+Perfil do cliente: ${perfil}.
+${situacao ? `Situação específica: ${situacao}.` : ""}
+
+Para cada frase, indique qual princípio neurocientífico foi aplicado e por que está dentro da ética OAB.
+Formato: [FRASE] | [Princípio] | [Por que é ético]`
+        }]
+      );
+      out.style.color = C.text;
+      out.textContent = r;
+    } catch(e) {
+      out.style.color = C.red;
+      out.textContent = "❌ " + e.message;
+    }
+    document.getElementById("gat-gerar").textContent = "🧠 Gerar Gatilhos Personalizados";
+  };
+}
+
+// ═══════════════════════════════════════
+// EXPORTAR JURISPRUDÊNCIA PARA PEÇA
+// ═══════════════════════════════════════
+function exportarJurisPecas(juris) {
+  // Filtrar peças da mesma área
+  const pecasDaArea = PECAS_DB[juris.area] || [];
+  const todasAreas = Object.entries(PECAS_DB).flatMap(([area, pecas]) =>
+    pecas.map(p => ({...p, _area: area}))
+  );
+  const pecasFiltradas = pecasDaArea.length > 0 ? pecasDaArea.map(p => ({...p, _area: juris.area})) : todasAreas;
+
+  const div = document.createElement("div");
+  div.id = "modal-juris-peca";
+  div.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;";
+  div.innerHTML = `
+  <div style="background:#fff;border-radius:14px;padding:28px;width:100%;max-width:580px;max-height:80vh;overflow-y:auto;">
+    <div style="font-size:16px;font-weight:800;color:${C.navy};margin-bottom:6px;">📄 Exportar para Peça Processual</div>
+    <div style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-bottom:16px;">Jurisprudência: <strong>${juris.tit}</strong> · ${juris.trib} · ${juris.area}</div>
+
+    <div style="background:${C.cream};border-radius:8px;padding:12px;margin-bottom:16px;font-family:sans-serif;font-size:11px;line-height:1.7;">
+      <strong>Texto que será inserido:</strong><br>
+      <em>"${juris.em}"</em><br>
+      <span style="color:${C.gold3};">(${juris.trib}${juris.num ? ", " + juris.num : ""}${juris.data ? ", " + fmtD(juris.data) : ""})</span>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:${C.navy};margin-bottom:10px;">
+      Selecione a peça ${pecasDaArea.length > 0 ? `(${juris.area} — ${pecasDaArea.length} disponíveis)` : "(todas as áreas)"}:
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;max-height:250px;overflow-y:auto;">
+      ${pecasFiltradas.length === 0
+        ? `<div style="font-family:sans-serif;font-size:12px;color:${C.gray};padding:12px;text-align:center;">Nenhuma peça cadastrada para esta área.</div>`
+        : pecasFiltradas.map((p, i) => `
+      <label style="display:flex;align-items:center;gap:10px;padding:10px;border:1.5px solid ${C.gray2};border-radius:8px;cursor:pointer;">
+        <input type="radio" name="peca-sel" value="${i}" style="accent-color:${C.gold};" ${i===0?"checked":""}/>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:${C.navy};">${p.tit}</div>
+          <div style="font-size:10px;color:${C.gray};font-family:sans-serif;">${p._area} · ${p.tags?.join(", ")||""}</div>
+        </div>
+      </label>`).join("")}
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('modal-juris-peca').remove()" style="flex:1;padding:10px;background:transparent;border:1.5px solid ${C.gray2};border-radius:8px;cursor:pointer;font-size:13px;">Cancelar</button>
+      <button id="exp-confirmar" style="flex:2;padding:10px;background:${C.gold};color:${C.navy};border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">Inserir na Peça Selecionada</button>
+    </div>
+  </div>`;
+  document.body.appendChild(div);
+
+  document.getElementById("exp-confirmar").onclick = () => {
+    const sel = document.querySelector("input[name='peca-sel']:checked");
+    if (!sel) return alert("Selecione uma peça.");
+    const peca = pecasFiltradas[parseInt(sel.value)];
+    const textoJuris = `\n\nJURISPRUDÊNCIA APLICÁVEL:\n"${juris.em}"\n(${juris.trib}${juris.num ? ", " + juris.num : ""}${juris.data ? ", julgado em " + fmtD(juris.data) : ""})\n`;
+    // Abrir aba de Peças com a jurisprudência pré-inserida
+    document.getElementById("modal-juris-peca").remove();
+    ABA = "pecas";
+    render();
+    // Aguardar render e inserir no editor
+    setTimeout(() => {
+      // Selecionar a área e peça
+      const areaSelect = document.getElementById("psel");
+      if (areaSelect) {
+        areaSelect.value = peca._area;
+        areaSelect.dispatchEvent(new Event("change"));
+        setTimeout(() => {
+          const editor = document.getElementById("editor");
+          if (editor) {
+            // Adicionar jurisprudência ao final do texto atual
+            const atual = editor.value || peca.txt || "";
+            editor.value = atual + textoJuris;
+            editor.focus();
+            editor.scrollTop = editor.scrollHeight;
+            alert("✅ Jurisprudência inserida na peça! Role até o final do texto para ver.");
+          }
+        }, 300);
+      }
+    }, 300);
+  };
+}
+</script>

@@ -75,12 +75,12 @@ function authCliente(req, res, next) {
   const { cliente_id, token, admin_email, admin_senha } = req.headers;
   // Modo master — dono do sistema
   if (cliente_id === "master") {
-    // Token master = hash(ADMIN_EMAIL + ADMIN_SENHA)
-    const masterToken = hashSenha(ADMIN_EMAIL + ADMIN_SENHA);
+    const masterToken = hashSenha("master:" + ADMIN_EMAIL);
     if (token === masterToken) {
       req.cliente = { id: "master", nome: "Administrador", ativo: 1, validade: null };
       return next();
     }
+    console.log("master auth falhou - token recebido:", token, "esperado:", masterToken);
     return res.status(401).json({ error: "Acesso negado." });
   }
   if (!cliente_id || !token) return res.status(401).json({ error: "Não autenticado." });
@@ -106,14 +106,30 @@ function authAdmin(req, res, next) {
 // ═══════════════════════════════════════
 // ROTAS PÚBLICAS
 // ═══════════════════════════════════════
-// Rota para obter token master (só funciona com email+senha corretos)
+// Rota para obter token master
 app.post("/api/auth/master-token", (req, res) => {
   const { email, senha } = req.body;
-  if ((email||"").trim().toLowerCase() !== ADMIN_EMAIL.trim().toLowerCase() ||
-      (senha||"").trim() !== ADMIN_SENHA.trim()) {
-    return res.status(401).json({ error: "Credenciais inválidas." });
+  const emailRecebido = (email||"").trim().toLowerCase();
+  const emailEsperado = ADMIN_EMAIL.trim().toLowerCase();
+  const senhaRecebida = (senha||"").trim();
+  const senhaEsperada = ADMIN_SENHA.trim();
+  
+  console.log("master-token tentativa:", {
+    emailRecebido, emailEsperado,
+    emailOk: emailRecebido === emailEsperado,
+    senhaOk: senhaRecebida === senhaEsperada,
+    senhaLen: senhaRecebida.length,
+    adminSenhaLen: senhaEsperada.length
+  });
+
+  if (emailRecebido !== emailEsperado) {
+    return res.status(401).json({ error: "E-mail incorreto." });
   }
-  const token = hashSenha(ADMIN_EMAIL + ADMIN_SENHA);
+  if (senhaRecebida !== senhaEsperada) {
+    return res.status(401).json({ error: "Senha incorreta." });
+  }
+  const token = hashSenha("master:" + ADMIN_EMAIL);
+  console.log("master-token gerado com sucesso:", token.slice(0,10)+"...");
   res.json({ ok: true, token, cliente_id: "master" });
 });
 
