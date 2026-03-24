@@ -492,7 +492,7 @@ function renderLayout(){
       </div>
       <div style="padding:7px 18px;border-bottom:1px solid rgba(201,168,76,.07);display:flex;align-items:center;gap:7px;">
         <div style="width:26px;height:26px;border-radius:50%;background:rgba(201,168,76,.2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${C.gold};flex-shrink:0;">${SESS.nome.charAt(0)}</div>
-        <div><div style="font-family:sans-serif;font-size:11px;font-weight:700;color:#fff;">${SESS.nome}</div><div style="font-family:sans-serif;font-size:8px;color:rgba(255,255,255,.3);">${SESS.role==="admin"?"Administrador":SESS.role==="advogado"?"Advogado":"Estagiário"}</div></div>
+        <div><div style="font-family:sans-serif;font-size:11px;font-weight:700;color:#fff;">${SESS.nome}</div><div style="font-family:sans-serif;font-size:8px;color:rgba(255,255,255,.3);">${(SESS.role==="admin"||SESS.role==="master")?"Administrador":SESS.role==="advogado"?"Advogado":"Estagiário"}</div></div>
       </div>
       <nav style="flex:1;padding:7px 6px;overflow-y:auto;">${itens}</nav>
       <div style="padding:9px 12px;border-top:1px solid rgba(201,168,76,.08);">
@@ -1126,7 +1126,7 @@ function ck(label,id,sel){return`<label id="${id}" style="display:flex;align-ite
 
 // ── CONFIGURAÇÕES ──
 function pgConfig(el){
-  if(SESS.role!=="admin"){el.innerHTML=`<p style="font-family:sans-serif;color:${C.red};">Acesso restrito ao administrador.</p>`;return;}
+  if(SESS.role!=="admin"&&SESS.role!=="master"){el.innerHTML=`<p style="font-family:sans-serif;color:${C.red};">Acesso restrito ao administrador.</p>`;return;}
   function draw(){
     const esc=DB.escritorio||{nome:"",oab:"",end:"",tel:"",email:"",logo:""};
     el.innerHTML=`
@@ -1977,7 +1977,7 @@ function pgCaptacao(el) {
   } catch(e) {}
 
   // Carregar status inicial
-  fetch("/api/whatsapp/status", { headers: { "cliente_id": SESS.cliente_id, "token": SESS.token } })
+  fetch("/api/whatsapp/status", { headers: { "cliente_id": SESS.cliente_id, "token": SESS.token, "admin_email": SESS.admin_email||"", "admin_senha": SESS.admin_senha||"" } })
     .then(r => r.json()).then(d => atualizarStatusWA(d.status, d.qr)).catch(() => {});
 
   function atualizarStatusWA(status, qr) {
@@ -2001,14 +2001,14 @@ function pgCaptacao(el) {
   document.getElementById("wa-iniciar").onclick = async () => {
     document.getElementById("wa-iniciar").textContent = "Conectando...";
     try {
-      await fetch("/api/whatsapp/iniciar", { method: "POST", headers: { "cliente_id": SESS.cliente_id, "token": SESS.token } });
+      await fetch("/api/whatsapp/iniciar", { method: "POST", headers: { "cliente_id": SESS.cliente_id, "token": SESS.token, "admin_email": SESS.admin_email||"", "admin_senha": SESS.admin_senha||"" } });
       document.getElementById("wa-status-txt").textContent = "Aguardando QR...";
     } catch(e) { alert("Erro ao conectar."); }
     document.getElementById("wa-iniciar").textContent = "▶ Conectar";
   };
 
   document.getElementById("wa-parar").onclick = async () => {
-    await fetch("/api/whatsapp/parar", { method: "POST", headers: { "cliente_id": SESS.cliente_id, "token": SESS.token } });
+    await fetch("/api/whatsapp/parar", { method: "POST", headers: { "cliente_id": SESS.cliente_id, "token": SESS.token, "admin_email": SESS.admin_email||"", "admin_senha": SESS.admin_senha||"" } });
   };
 }
 

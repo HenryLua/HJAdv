@@ -72,7 +72,7 @@ function authCliente(req, res, next) {
   const { cliente_id, token, admin_email, admin_senha } = req.headers;
   // Modo master — dono do sistema
   if (cliente_id === "master" && token === "master") {
-    if (admin_email !== ADMIN_EMAIL || hashSenha(admin_senha || "") !== hashSenha(ADMIN_SENHA)) {
+    if (admin_email !== ADMIN_EMAIL || (admin_senha || "") !== ADMIN_SENHA) {
       return res.status(401).json({ error: "Acesso negado." });
     }
     req.cliente = { id: "master", nome: "Administrador", ativo: 1, validade: null };
@@ -90,7 +90,7 @@ function authCliente(req, res, next) {
 }
 function authAdmin(req, res, next) {
   const { admin_email, admin_senha } = req.headers;
-  if (admin_email !== ADMIN_EMAIL || hashSenha(admin_senha || "") !== hashSenha(ADMIN_SENHA)) {
+  if (admin_email !== ADMIN_EMAIL || (admin_senha || "") !== ADMIN_SENHA) {
     return res.status(401).json({ error: "Acesso admin negado." });
   }
   next();
@@ -160,25 +160,58 @@ app.post("/api/auth/trocar-senha", authCliente, (req, res) => {
 });
 
 // ═══════════════════════════════════════
-// GEMINI IA
+// IA — GEMINI + GROQ FALLBACK
 // ═══════════════════════════════════════
+const GROQ_KEY = process.env.GROQ_API_KEY || "";
+
+async function chamarGemini(system, messages, max_tokens) {
+  const contents = messages.map(m => ({ role: m.role === "user" ? "user" : "model", parts: [{ text: m.content }] }));
+  if (system) contents.unshift({ role: "user", parts: [{ text: system }] }, { role: "model", parts: [{ text: "Entendido." }] });
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: max_tokens, temperature: 0.7 } })
+  });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error.message);
+  return d.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
+async function chamarGroq(system, messages, max_tokens) {
+  const msgs = [];
+  if (system) msgs.push({ role: "system", content: system });
+  messages.forEach(m => msgs.push({ role: m.role, content: m.content }));
+  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
+    body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: msgs, max_tokens, temperature: 0.7 })
+  });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error.message);
+  return d.choices?.[0]?.message?.content || "";
+}
+
 app.post("/api/ia", authCliente, async (req, res) => {
-  if (!GEMINI_KEY) return res.status(500).json({ error: "IA não configurada no servidor." });
   const { system, messages, max_tokens = 2000 } = req.body;
   if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: "Requisição inválida." });
-  const contents = messages.map(m => ({ role: m.role === "user" ? "user" : "model", parts: [{ text: m.content }] }));
-  if (system) contents.unshift({ role: "user", parts: [{ text: system }] }, { role: "model", parts: [{ text: "Entendido. Estou pronto para ajudar." }] });
+  if (!GEMINI_KEY && !GROQ_KEY) return res.status(500).json({ error: "IA não configurada no servidor." });
+
+  // Tentar Gemini primeiro
+  if (GEMINI_KEY) {
+    try {
+      const text = await chamarGemini(system, messages, max_tokens);
+      return res.json({ text, provider: "gemini" });
+    } catch (e) {
+      console.warn("Gemini falhou, tentando Groq:", e.message);
+      // Se não tem Groq, retorna o erro do Gemini
+      if (!GROQ_KEY) return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // Fallback para Groq
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: max_tokens, temperature: 0.7 } })
-    });
-    const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
-    res.json({ text: data.candidates?.[0]?.content?.parts?.[0]?.text || "" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const text = await chamarGroq(system, messages, max_tokens);
+    return res.json({ text, provider: "groq" });
+  } catch (e) {
+    return res.status(500).json({ error: "Ambas as IAs falharam: " + e.message });
   }
 });
 
