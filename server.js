@@ -249,24 +249,24 @@ app.post("/api/transcrever", authCliente, upload.single("audio"), async (req, re
   console.log("transcrever: arquivo recebido:", req.file.originalname, req.file.size, "bytes");
 
   try {
-    const formData = new FormData();
-    formData.append("file", req.file.buffer, {
-      filename: req.file.originalname || "audio.mp3",
-      contentType: req.file.mimetype || "audio/mpeg"
-    });
-    formData.append("model", "whisper-large-v3-turbo");
-    formData.append("language", "pt");
-    formData.append("response_format", "verbose_json");
+    // Usar FormData nativo do Node 20 com Blob
+    const blob = new Blob([req.file.buffer], { type: req.file.mimetype || "audio/mpeg" });
+    const fd = new globalThis.FormData();
+    fd.append("file", blob, req.file.originalname || "audio.mp3");
+    fd.append("model", "whisper-large-v3-turbo");
+    fd.append("language", "pt");
+    fd.append("response_format", "verbose_json");
 
     const r = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${GROQ_KEY}`, ...formData.getHeaders() },
-      body: formData
+      headers: { "Authorization": `Bearer ${GROQ_KEY}` },
+      body: fd
     });
     const d = await r.json();
     if (d.error) return res.status(500).json({ error: d.error.message });
     res.json({ ok: true, texto: d.text, segmentos: d.segments || [] });
   } catch (e) {
+    console.error("transcrever erro:", e.message);
     res.status(500).json({ error: "Erro ao transcrever: " + e.message });
   }
 });
@@ -288,10 +288,17 @@ async function iniciarWA(cliente_id) {
     sock.ev.on("creds.update", saveCreds);
     sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
       if (qr) {
-        waSessions[cliente_id].qr = qr;
-        waSessions[cliente_id].status = "aguardando_qr";
-        db.prepare("INSERT OR REPLACE INTO wa_sessions(cliente_id,status,qr,updated_at) VALUES(?,?,?,datetime('now'))").run(cliente_id, "aguardando_qr", qr);
-        io.to(`wa_${cliente_id}`).emit("wa_status", { status: "aguardando_qr", qr });
+        try {
+          const QRCode = require("qrcode");
+          const qrDataUrl = await QRCode.toDataURL(qr);
+          waSessions[cliente_id].qr = qrDataUrl;
+          waSessions[cliente_id].status = "aguardando_qr";
+          db.prepare("INSERT OR REPLACE INTO wa_sessions(cliente_id,status,qr,updated_at) VALUES(?,?,?,datetime('now'))").run(cliente_id, "aguardando_qr", qrDataUrl);
+          io.to(`wa_${cliente_id}`).emit("wa_status", { status: "aguardando_qr", qr: qrDataUrl });
+        } catch(qrErr) {
+          console.error("QR generation error:", qrErr.message);
+          io.to(`wa_${cliente_id}`).emit("wa_status", { status: "aguardando_qr", qr: null });
+        }
       }
       if (connection === "open") {
         waSessions[cliente_id].status = "conectado";
