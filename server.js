@@ -69,7 +69,15 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 
 // ─── AUTH ───
 function authCliente(req, res, next) {
-  const { cliente_id, token } = req.headers;
+  const { cliente_id, token, admin_email, admin_senha } = req.headers;
+  // Modo master — dono do sistema
+  if (cliente_id === "master" && token === "master") {
+    if (admin_email !== ADMIN_EMAIL || hashSenha(admin_senha || "") !== hashSenha(ADMIN_SENHA)) {
+      return res.status(401).json({ error: "Acesso negado." });
+    }
+    req.cliente = { id: "master", nome: "Administrador", ativo: 1, validade: null };
+    return next();
+  }
   if (!cliente_id || !token) return res.status(401).json({ error: "Não autenticado." });
   const cli = db.prepare("SELECT * FROM clientes WHERE id=?").get(cliente_id);
   if (!cli || !cli.ativo) return res.status(401).json({ error: "Acesso negado." });

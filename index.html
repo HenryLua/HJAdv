@@ -401,7 +401,15 @@ function fmtR(n){return"R$ "+Number(n||0).toLocaleString("pt-BR",{minimumFractio
 // ═══ API IA — chama SEU backend ═══
 async function apiIA(system, messages){
   const headers = {"Content-Type":"application/json"};
-  if(SESS&&SESS.cliente_id){headers["cliente_id"]=SESS.cliente_id;headers["token"]=SESS.token;}
+  if(SESS&&SESS.cliente_id&&SESS.cliente_id!=="master"){
+    headers["cliente_id"]=SESS.cliente_id;
+    headers["token"]=SESS.token;
+  } else if(SESS&&SESS.cliente_id==="master"){
+    headers["cliente_id"]="master";
+    headers["token"]="master";
+    headers["admin_email"]=SESS.admin_email;
+    headers["admin_senha"]=SESS.admin_senha;
+  }
   const res = await fetch(API_URL, {
     method:"POST",
     headers,
@@ -468,7 +476,7 @@ const MENU_ADMIN=[{id:"dashboard",l:"Painel",i:"🏛",s:null},{id:"clientes",l:"
 const MENU_USER=[{id:"dashboard",l:"Painel",i:"🏛",s:null},{id:"processos",l:"Processos",i:"📋",s:"JURÍDICO"},{id:"prazos",l:"Prazos",i:"⏰",s:null},{id:"juris",l:"Jurisprudências",i:"📖",s:null},{id:"pecas",l:"Peças Processuais",i:"📄",s:null},{id:"videochamada",l:"Videochamada",i:"📹",s:null},{id:"degravacao",l:"Degravação IA",i:"🎙️",s:"FERRAMENTAS"},{id:"ia",l:"Assistente IA",i:"🤖",s:null}];
 
 function renderLayout(){
-  const menu=SESS.role==="admin"?MENU_ADMIN:MENU_USER;
+  const menu=(SESS.role==="admin"||SESS.role==="master")?MENU_ADMIN:MENU_USER;
   const itens=menu.map(m=>`
     ${m.s?`<div style="font-family:sans-serif;font-size:8px;font-weight:700;color:rgba(255,255,255,.2);text-transform:uppercase;letter-spacing:1.5px;padding:9px 12px 3px;">${m.s}</div>`:""}
     <button data-aba="${m.id}" style="width:100%;display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:6px;border:none;cursor:pointer;margin-bottom:1px;background:${ABA===m.id?"rgba(201,168,76,.17)":"transparent"};color:${ABA===m.id?C.gold:"rgba(255,255,255,.45)"};font-family:sans-serif;font-size:12px;font-weight:${ABA===m.id?700:400};text-align:left;">
