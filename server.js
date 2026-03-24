@@ -72,6 +72,8 @@ function authCliente(req, res, next) {
   const { cliente_id, token, admin_email, admin_senha } = req.headers;
   // Modo master — dono do sistema
   if (cliente_id === "master" && token === "master") {
+    console.log("Master auth - email recebido:", admin_email, "email esperado:", ADMIN_EMAIL);
+    console.log("Senha match:", (admin_senha || "") === ADMIN_SENHA);
     if (admin_email !== ADMIN_EMAIL || (admin_senha || "") !== ADMIN_SENHA) {
       return res.status(401).json({ error: "Acesso negado." });
     }
