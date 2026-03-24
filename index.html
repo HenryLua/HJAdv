@@ -50,7 +50,7 @@ function limparSessao(){
 // ═══ SAVE/LOAD DB (servidor) ═══
 async function saveDB(){
   try{
-    if(!SESS||!SESS.cliente_id)return;
+    if(!SESS||!SESS.cliente_id||SESS.cliente_id==="master")return;
     await fetch("/api/dados",{
       method:"POST",
       headers:{"Content-Type":"application/json","cliente_id":SESS.cliente_id,"token":SESS.token},
@@ -60,6 +60,7 @@ async function saveDB(){
 }
 async function loadDB(){
   try{
+    if(SESS.cliente_id==="master")return "ok";
     const r=await fetch("/api/dados",{headers:{"cliente_id":SESS.cliente_id,"token":SESS.token}});
     if(r.status===403){const d=await r.json();if(d.vencida)return "vencida";}
     if(!r.ok)return "erro";
@@ -125,9 +126,20 @@ function telaLogin(){
     if(!email||!senha){err.textContent="Preencha e-mail e senha.";return;}
     document.getElementById("lg-btn").textContent="Entrando...";
     try{
+      // Tentar primeiro como admin master
+      const rAdmin=await fetch("/api/admin/clientes",{headers:{"admin_email":email,"admin_senha":senha}});
+      if(rAdmin.ok){
+        // É o dono — entra com acesso master ao sistema
+        SESS={cliente_id:"master",token:"master",nome:"Administrador",email:email,validade:null,role:"master",admin_email:email,admin_senha:senha};
+        DB={...DEF_DB};
+        salvarSessao(SESS);
+        iniciarApp();
+        return;
+      }
+      // Senão tentar como cliente normal
       const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,senha})});
       const d=await r.json();
-      if(!d.ok){err.textContent=d.error||"Erro ao entrar.";document.getElementById("lg-btn").textContent="Entrar";return;}
+      if(!d.ok){err.textContent=d.error||"E-mail ou senha incorretos.";document.getElementById("lg-btn").textContent="Entrar";return;}
       SESS={cliente_id:d.cliente_id,token:d.token,nome:d.nome,email:d.email,validade:d.validade,role:"user"};
       salvarSessao(SESS);
       const status=await loadDB();
