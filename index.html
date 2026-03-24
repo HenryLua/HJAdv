@@ -17,6 +17,7 @@ input,select,textarea{font-family:'Segoe UI',sans-serif;}
 <body>
 <div id="app"></div>
 <script>
+
 const API_URL="/api/ia";
 
 // ═══ CONSTANTES VISUAIS ═══
@@ -73,7 +74,7 @@ function fmtD(s){if(!s)return"";const p=s.split("-");return`${p[2]}/${p[1]}/${p[
 function dias(s){return Math.ceil((new Date(s)-new Date())/(1000*60*60*24));}
 
 
-<script>
+
 
 // ═══════════════════════════════════════
 // TELAS DE AUTENTICAÇÃO
@@ -1558,10 +1559,9 @@ render();
 
 // ═══ INICIALIZAR ═══
 telaLogin();
-</script>
-</body>
-</html>
-<script>
+
+
+
 // ═══════════════════════════════════════
 // ROTEIROS DE ATENDIMENTO
 // ═══════════════════════════════════════
@@ -1991,9 +1991,9 @@ function pgCaptacao(el) {
     await fetch("/api/whatsapp/parar", { method: "POST", headers: { "cliente_id": SESS.cliente_id, "token": SESS.token } });
   };
 }
-</script>
 
-<script>
+
+
 // ═══════════════════════════════════════
 // MÓDULO CLIENTES DO ESCRITÓRIO
 // ═══════════════════════════════════════
@@ -2279,4 +2279,7 @@ function abrirFormBriefing(cliente, cb) {
     cb();
   };
 }
+
 </script>
+</body>
+</html>
