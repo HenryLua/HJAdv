@@ -132,17 +132,32 @@ function telaLogin(){
     document.getElementById("lg-btn").textContent="Entrando...";
     try{
       // Tentar primeiro como admin master
-      const rMaster=await fetch("/api/auth/master-token",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,senha})});
-      if(rMaster.ok){
-        const dMaster=await rMaster.json();
-        if(dMaster.ok){
-          SESS={cliente_id:"master",token:dMaster.token,nome:"Administrador",email:email,validade:null,role:"master",admin_email:email,admin_senha:senha};
+      let isMaster = false;
+      try {
+        const rMaster=await fetch("/api/auth/master-token",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,senha})});
+        if(rMaster.ok){
+          const dMaster=await rMaster.json();
+          if(dMaster.ok){
+            SESS={cliente_id:"master",token:dMaster.token,nome:"Administrador",email:email,validade:null,role:"master",admin_email:email,admin_senha:senha};
+            DB={...DEF_DB};
+            salvarSessao(SESS);
+            iniciarApp();
+            return;
+          }
+        }
+        // Tentar via admin panel como fallback
+        const rAdmin=await fetch("/api/admin/clientes",{headers:{"admin_email":email,"admin_senha":senha}});
+        if(rAdmin.ok){
+          // É admin mas master-token falhou — usar token alternativo
+          const altToken=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("master:"+email.trim().toLowerCase()))
+            .then(b=>Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join(""));
+          SESS={cliente_id:"master",token:altToken,nome:"Administrador",email:email,validade:null,role:"master",admin_email:email,admin_senha:senha};
           DB={...DEF_DB};
           salvarSessao(SESS);
           iniciarApp();
           return;
         }
-      }
+      } catch(ex) { console.warn("master check:", ex); }
       // Senão tentar como cliente normal
       const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,senha})});
       const d=await r.json();

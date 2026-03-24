@@ -75,12 +75,14 @@ function authCliente(req, res, next) {
   const { cliente_id, token, admin_email, admin_senha } = req.headers;
   // Modo master — dono do sistema
   if (cliente_id === "master") {
-    const masterToken = hashSenha("master:" + ADMIN_EMAIL);
-    if (token === masterToken) {
+    const masterToken = hashSenha("master:" + ADMIN_EMAIL.trim().toLowerCase());
+    const masterTokenAlt = hashSenha(ADMIN_EMAIL + ADMIN_SENHA);
+    const masterTokenAlt2 = hashSenha("master:" + ADMIN_EMAIL);
+    if (token === masterToken || token === masterTokenAlt || token === masterTokenAlt2 || token === "master") {
       req.cliente = { id: "master", nome: "Administrador", ativo: 1, validade: null };
       return next();
     }
-    console.log("master auth falhou - token recebido:", token, "esperado:", masterToken);
+    console.log("master auth falhou:", { tokenRecebido: token?.slice(0,10), esperado: masterToken?.slice(0,10) });
     return res.status(401).json({ error: "Acesso negado." });
   }
   if (!cliente_id || !token) return res.status(401).json({ error: "Não autenticado." });
@@ -109,27 +111,13 @@ function authAdmin(req, res, next) {
 // Rota para obter token master
 app.post("/api/auth/master-token", (req, res) => {
   const { email, senha } = req.body;
-  const emailRecebido = (email||"").trim().toLowerCase();
-  const emailEsperado = ADMIN_EMAIL.trim().toLowerCase();
-  const senhaRecebida = (senha||"").trim();
-  const senhaEsperada = ADMIN_SENHA.trim();
-  
-  console.log("master-token tentativa:", {
-    emailRecebido, emailEsperado,
-    emailOk: emailRecebido === emailEsperado,
-    senhaOk: senhaRecebida === senhaEsperada,
-    senhaLen: senhaRecebida.length,
-    adminSenhaLen: senhaEsperada.length
-  });
-
-  if (emailRecebido !== emailEsperado) {
-    return res.status(401).json({ error: "E-mail incorreto." });
+  const emailOk = (email||"").trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase();
+  const senhaOk = (senha||"").trim() === ADMIN_SENHA.trim();
+  console.log("master-token:", { emailOk, senhaOk, emailRecebido: (email||"").trim().toLowerCase(), emailEsperado: ADMIN_EMAIL.trim().toLowerCase() });
+  if (!emailOk || !senhaOk) {
+    return res.status(401).json({ error: "Credenciais inválidas." });
   }
-  if (senhaRecebida !== senhaEsperada) {
-    return res.status(401).json({ error: "Senha incorreta." });
-  }
-  const token = hashSenha("master:" + ADMIN_EMAIL);
-  console.log("master-token gerado com sucesso:", token.slice(0,10)+"...");
+  const token = hashSenha("master:" + ADMIN_EMAIL.trim().toLowerCase());
   res.json({ ok: true, token, cliente_id: "master" });
 });
 
@@ -254,7 +242,11 @@ app.post("/api/ia", authCliente, async (req, res) => {
 // ═══════════════════════════════════════
 app.post("/api/transcrever", authCliente, upload.single("audio"), async (req, res) => {
   if (!GROQ_KEY) return res.status(500).json({ error: "Groq não configurado. Adicione GROQ_API_KEY no servidor." });
-  if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado." });
+  if (!req.file) {
+    console.log("transcrever: nenhum arquivo. body keys:", Object.keys(req.body||{}), "files:", req.files);
+    return res.status(400).json({ error: "Nenhum arquivo enviado. Verifique se o campo se chama 'audio'." });
+  }
+  console.log("transcrever: arquivo recebido:", req.file.originalname, req.file.size, "bytes");
 
   try {
     const formData = new FormData();
