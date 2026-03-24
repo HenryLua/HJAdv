@@ -26,6 +26,9 @@ const AREAS=["Civil","Penal","Processual Civil","Processual Penal","Família","T
 const STATUS_PROC=["Em andamento","Aguardando audiência","Aguardando sentença","Recurso","Concluído","Arquivado"];
 const TIPOS_FIN=["Honorários","Aporte","Pagamento Dativo","Nota Fiscal","Despesa","Outros"];
 const LEGS=["Código Penal","Código de Processo Penal","Código Civil","Código de Processo Civil","CLT","Constituição Federal","ECA","CDC","Lei Maria da Penha","CTB"];
+const DOUTS=["Nucci","Didier","Tartuce","Moraes","Capez","Lenza","Gonçalves","Marinoni","Greco","Barroso"];
+const SUMS=["Súmula 231 STJ","Súmula 7 STJ","Súmula 83 STJ","Súmula 11 STF","Súmula 14 STF","Súmula Vinculante 14","Súmula 421 STJ","Súmula 510 STJ"];
+const SSUM="";const SDOUT="";
 const DEF_DB={
   advogados:[],estagiarios:[],processos:[],prazos:[],juris:[],financeiro:[],degravacoes:[],acervo:[],acervSel:[],adminPass:"hjadv2025",escritorio:{},clientes:[]
 };
@@ -1521,13 +1524,13 @@ function pgWhatsApp(el){
     socket.on("wa_status",data=>{waStatus=data.status;waQR=data.qr;draw();});
   }
   async function checkStatus(){
-    try{const r=await fetch("/api/whatsapp/status");const d=await r.json();waStatus=d.status;waQR=d.qr;draw();}catch(e){}
+    try{const r=await fetch("/api/whatsapp/status",{headers:{"cliente_id":SESS.cliente_id,"token":SESS.token,"admin_email":SESS.admin_email||"","admin_senha":SESS.admin_senha||""}});const d=await r.json();waStatus=d.status;waQR=d.qr;draw();}catch(e){}
   }
   async function iniciar(){
-    await fetch("/api/whatsapp/iniciar",{method:"POST"});waStatus="aguardando_qr";draw();
+    await fetch("/api/whatsapp/iniciar",{method:"POST",headers:{"cliente_id":SESS.cliente_id,"token":SESS.token,"admin_email":SESS.admin_email||"","admin_senha":SESS.admin_senha||""}});waStatus="aguardando_qr";draw();
   }
   async function parar(){
-    await fetch("/api/whatsapp/parar",{method:"POST"});waStatus="desconectado";waQR=null;draw();
+    await fetch("/api/whatsapp/parar",{method:"POST",headers:{"cliente_id":SESS.cliente_id,"token":SESS.token,"admin_email":SESS.admin_email||"","admin_senha":SESS.admin_senha||""}});waStatus="desconectado";waQR=null;draw();
   }
   function draw(){
     const cor=waStatus==="conectado"?C.green:waStatus==="aguardando_qr"?C.orange:C.gray;
