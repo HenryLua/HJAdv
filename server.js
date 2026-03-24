@@ -5,6 +5,9 @@ const crypto = require("crypto");
 const fs = require("fs");
 const { createServer } = require("http");
 const { Server } = require("socket.io");
+const multer = require("multer");
+const FormData = require("form-data");
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 // ─── VOLUME PERSISTENTE ───
 // O Railway usa /app como mount point do volume
@@ -71,15 +74,14 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 function authCliente(req, res, next) {
   const { cliente_id, token, admin_email, admin_senha } = req.headers;
   // Modo master — dono do sistema
-  if (cliente_id === "master" && token === "master") {
-    const emailOk = (admin_email || "").trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase();
-    const senhaOk = (admin_senha || "").trim() === ADMIN_SENHA.trim();
-    if (!emailOk || !senhaOk) {
-      console.warn("Master auth falhou - email:", admin_email, "senhaOk:", senhaOk);
-      return res.status(401).json({ error: "Acesso negado." });
+  if (cliente_id === "master") {
+    // Token master = hash(ADMIN_EMAIL + ADMIN_SENHA)
+    const masterToken = hashSenha(ADMIN_EMAIL + ADMIN_SENHA);
+    if (token === masterToken) {
+      req.cliente = { id: "master", nome: "Administrador", ativo: 1, validade: null };
+      return next();
     }
-    req.cliente = { id: "master", nome: "Administrador", ativo: 1, validade: null };
-    return next();
+    return res.status(401).json({ error: "Acesso negado." });
   }
   if (!cliente_id || !token) return res.status(401).json({ error: "Não autenticado." });
   const cli = db.prepare("SELECT * FROM clientes WHERE id=?").get(cliente_id);
@@ -104,6 +106,17 @@ function authAdmin(req, res, next) {
 // ═══════════════════════════════════════
 // ROTAS PÚBLICAS
 // ═══════════════════════════════════════
+// Rota para obter token master (só funciona com email+senha corretos)
+app.post("/api/auth/master-token", (req, res) => {
+  const { email, senha } = req.body;
+  if ((email||"").trim().toLowerCase() !== ADMIN_EMAIL.trim().toLowerCase() ||
+      (senha||"").trim() !== ADMIN_SENHA.trim()) {
+    return res.status(401).json({ error: "Credenciais inválidas." });
+  }
+  const token = hashSenha(ADMIN_EMAIL + ADMIN_SENHA);
+  res.json({ ok: true, token, cliente_id: "master" });
+});
+
 app.post("/api/auth/verificar-codigo", (req, res) => {
   const { codigo } = req.body;
   if (!codigo) return res.status(400).json({ error: "Código obrigatório." });
@@ -217,6 +230,36 @@ app.post("/api/ia", authCliente, async (req, res) => {
     return res.json({ text, provider: "groq" });
   } catch (e) {
     return res.status(500).json({ error: "Ambas as IAs falharam: " + e.message });
+  }
+});
+
+// ═══════════════════════════════════════
+// TRANSCRIÇÃO DE ÁUDIO — GROQ WHISPER
+// ═══════════════════════════════════════
+app.post("/api/transcrever", authCliente, upload.single("audio"), async (req, res) => {
+  if (!GROQ_KEY) return res.status(500).json({ error: "Groq não configurado. Adicione GROQ_API_KEY no servidor." });
+  if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado." });
+
+  try {
+    const formData = new FormData();
+    formData.append("file", req.file.buffer, {
+      filename: req.file.originalname || "audio.mp3",
+      contentType: req.file.mimetype || "audio/mpeg"
+    });
+    formData.append("model", "whisper-large-v3-turbo");
+    formData.append("language", "pt");
+    formData.append("response_format", "verbose_json");
+
+    const r = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${GROQ_KEY}`, ...formData.getHeaders() },
+      body: formData
+    });
+    const d = await r.json();
+    if (d.error) return res.status(500).json({ error: d.error.message });
+    res.json({ ok: true, texto: d.text, segmentos: d.segments || [] });
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao transcrever: " + e.message });
   }
 });
 

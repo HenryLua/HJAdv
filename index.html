@@ -130,14 +130,16 @@ function telaLogin(){
     document.getElementById("lg-btn").textContent="Entrando...";
     try{
       // Tentar primeiro como admin master
-      const rAdmin=await fetch("/api/admin/clientes",{headers:{"admin_email":email,"admin_senha":senha}});
-      if(rAdmin.ok){
-        // É o dono — entra com acesso master ao sistema
-        SESS={cliente_id:"master",token:"master",nome:"Administrador",email:email,validade:null,role:"master",admin_email:email,admin_senha:senha};
-        DB={...DEF_DB};
-        salvarSessao(SESS);
-        iniciarApp();
-        return;
+      const rMaster=await fetch("/api/auth/master-token",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,senha})});
+      if(rMaster.ok){
+        const dMaster=await rMaster.json();
+        if(dMaster.ok){
+          SESS={cliente_id:"master",token:dMaster.token,nome:"Administrador",email:email,validade:null,role:"master",admin_email:email,admin_senha:senha};
+          DB={...DEF_DB};
+          salvarSessao(SESS);
+          iniciarApp();
+          return;
+        }
       }
       // Senão tentar como cliente normal
       const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,senha})});
@@ -977,7 +979,7 @@ function pgDegravacao(el){
     ${aba==="upload"?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
       <div style="background:#fff;border-radius:11px;border:1px solid #E8EDF4;padding:20px;">
         <div style="font-size:13px;color:#0B1F3A;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid #E8EDF4;font-weight:600;">📁 Upload de Arquivo</div>
-        <div style="background:rgba(201,168,76,.07);border-radius:6px;padding:7px 9px;font-family:sans-serif;font-size:11px;color:#a8872e;margin-bottom:9px;line-height:1.5;">💡 Selecione um arquivo de áudio ou vídeo. A IA irá transcrever e organizar o conteúdo. Máximo 10MB.</div>
+        <div style="background:rgba(26,122,74,.07);border-radius:6px;padding:7px 9px;font-family:sans-serif;font-size:11px;color:#1A7A4A;margin-bottom:9px;line-height:1.5;">✅ Transcrição real via Groq Whisper. Suporta MP3, MP4, WAV, M4A, OGG, WebM. Máximo 25MB.</div>
         <div id="uploadarea" onclick="document.getElementById('uploadfile').click()" style="border:2px dashed #E8EDF4;border-radius:9px;padding:24px;text-align:center;cursor:pointer;margin-bottom:9px;background:#F5F0E8;transition:.2s;">
           <div style="font-size:28px;margin-bottom:6px;">📂</div>
           <div id="uploadname" style="font-family:sans-serif;font-size:12px;color:#8A9BB0;">Clique para selecionar arquivo</div>
@@ -1043,18 +1045,30 @@ function pgDegravacao(el){
       document.getElementById("uploadorg").onclick=async()=>{
         const file=document.getElementById("uploadfile").files[0];
         if(!file)return alert("Selecione um arquivo primeiro.");
-        if(file.size>10*1024*1024)return alert("Arquivo muito grande. Máximo 10MB.");
+        if(file.size>25*1024*1024)return alert("Arquivo muito grande. Máximo 25MB.");
         const fmt=document.getElementById("uploadfmt").value;
-        document.getElementById("uploadorg").textContent="Processando...";
-        document.getElementById("uploadout").textContent="⏳ Lendo o arquivo...";
+        const btn=document.getElementById("uploadorg");
+        const out=document.getElementById("uploadout");
+        btn.textContent="Transcrevendo...";btn.disabled=true;
+        out.style.color="#8A9BB0";out.textContent="⏳ Enviando arquivo para transcrição...";
         try{
-          const text=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(file,'utf-8');});
-          document.getElementById("uploadout").textContent="⏳ Organizando com IA...";
-          const prompt=`O conteúdo a seguir é uma transcrição extraída de um arquivo de mídia. Organize no formato de ${fmtP(fmt)}:\n\n${text.substring(0,8000)}`;
-          const r=await apiIA("Você é assistente jurídico. Organize transcrições de forma profissional.",[{role:"user",content:prompt}]);
-          document.getElementById("uploadout").style.color="#1C2B3A";document.getElementById("uploadout").textContent=r;uploadOut=r;
-        }catch(e){document.getElementById("uploadout").textContent="❌ "+e.message+"\n\nDica: para áudios/vídeos, extraia o texto via YouTube ou Meet e use a aba Colar Texto.";}
-        document.getElementById("uploadorg").textContent="🤖 Transcrever com IA";
+          // Enviar para Groq Whisper via servidor
+          const formData=new FormData();
+          formData.append("audio",file);
+          const headers={"cliente_id":SESS.cliente_id,"token":SESS.token};
+          if(SESS.admin_email){headers["admin_email"]=SESS.admin_email;headers["admin_senha"]=SESS.admin_senha||"";}
+          const r=await fetch("/api/transcrever",{method:"POST",headers,body:formData});
+          const d=await r.json();
+          if(!d.ok)throw new Error(d.error||"Erro na transcrição");
+          out.textContent="⏳ Organizando texto com IA...";
+          const prompt=`O texto abaixo é uma transcrição automática de áudio/vídeo. Organize no formato de ${fmtP(fmt)}, corrigindo pontuação e formatando adequadamente:\n\n${d.texto}`;
+          const resultado=await apiIA("Você é assistente jurídico. Organize transcrições de forma profissional e clara.",[{role:"user",content:prompt}]);
+          out.style.color="#1C2B3A";out.textContent=resultado;uploadOut=resultado;
+        }catch(e){
+          out.style.color="#C0392B";
+          out.textContent="❌ "+e.message;
+        }
+        btn.textContent="🤖 Transcrever com IA";btn.disabled=false;
       };
     }
 
