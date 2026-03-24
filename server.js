@@ -72,9 +72,10 @@ function authCliente(req, res, next) {
   const { cliente_id, token, admin_email, admin_senha } = req.headers;
   // Modo master — dono do sistema
   if (cliente_id === "master" && token === "master") {
-    console.log("Master auth - email recebido:", admin_email, "email esperado:", ADMIN_EMAIL);
-    console.log("Senha match:", (admin_senha || "") === ADMIN_SENHA);
-    if (admin_email !== ADMIN_EMAIL || (admin_senha || "") !== ADMIN_SENHA) {
+    const emailOk = (admin_email || "").trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase();
+    const senhaOk = (admin_senha || "").trim() === ADMIN_SENHA.trim();
+    if (!emailOk || !senhaOk) {
+      console.warn("Master auth falhou - email:", admin_email, "senhaOk:", senhaOk);
       return res.status(401).json({ error: "Acesso negado." });
     }
     req.cliente = { id: "master", nome: "Administrador", ativo: 1, validade: null };
@@ -92,7 +93,9 @@ function authCliente(req, res, next) {
 }
 function authAdmin(req, res, next) {
   const { admin_email, admin_senha } = req.headers;
-  if (admin_email !== ADMIN_EMAIL || (admin_senha || "") !== ADMIN_SENHA) {
+  const emailOk = (admin_email || "").trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase();
+  const senhaOk = (admin_senha || "").trim() === ADMIN_SENHA.trim();
+  if (!emailOk || !senhaOk) {
     return res.status(401).json({ error: "Acesso admin negado." });
   }
   next();
