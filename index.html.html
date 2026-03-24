@@ -1,0 +1,2282 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HJ ADV — Escritório Digital</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',sans-serif;background:#F0EDE6;min-height:100vh;}
+table{width:100%;border-collapse:collapse;}
+input,select,textarea{font-family:'Segoe UI',sans-serif;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:#F0EDE6;}
+::-webkit-scrollbar-thumb{background:#C9A84C;border-radius:3px;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const API_URL="/api/ia";
+
+// ═══ CONSTANTES VISUAIS ═══
+const C={navy:"#0B1F3A",gold:"#C9A84C",gold3:"#a8872e",cream:"#F5F0E8",white:"#fff",gray:"#8A9BB0",gray2:"#E8EDF4",red:"#C0392B",green:"#1A7A4A",blue:"#2980B9",purple:"#8E44AD",orange:"#e67e22",text:"#1C2B3A"};
+const AREAS=["Civil","Penal","Processual Civil","Processual Penal","Família","Trânsito","Trabalhista","Administrativo","Pareceres"];
+const STATUS_PROC=["Em andamento","Aguardando audiência","Aguardando sentença","Recurso","Concluído","Arquivado"];
+const TIPOS_FIN=["Honorários","Aporte","Pagamento Dativo","Nota Fiscal","Despesa","Outros"];
+const LEGS=["Código Penal","Código de Processo Penal","Código Civil","Código de Processo Civil","CLT","Constituição Federal","ECA","CDC","Lei Maria da Penha","CTB"];
+const DEF_DB={
+  advogados:[],estagiarios:[],processos:[],prazos:[],juris:[],financeiro:[],degravacoes:[],acervo:[],acervSel:[],adminPass:"hjadv2025",escritorio:{},clientes:[]
+};
+
+// ═══ ESTADO GLOBAL ═══
+let DB = {...DEF_DB};
+let SESS = null; // {cliente_id, token, nome, email, validade, role}
+let ABA = "dashboard";
+
+// ═══ SESSÃO ═══
+function getSessaoSalva(){
+  try{ return JSON.parse(localStorage.getItem("hjadv_sess")||"null"); }catch{return null;}
+}
+function salvarSessao(sess){
+  localStorage.setItem("hjadv_sess", JSON.stringify(sess));
+}
+function limparSessao(){
+  localStorage.removeItem("hjadv_sess");
+  SESS=null; DB={...DEF_DB};
+}
+
+// ═══ SAVE/LOAD DB (servidor) ═══
+async function saveDB(){
+  try{
+    if(!SESS||!SESS.cliente_id)return;
+    await fetch("/api/dados",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","cliente_id":SESS.cliente_id,"token":SESS.token},
+      body:JSON.stringify({dados:DB})
+    });
+  }catch(e){console.warn("saveDB erro:",e);}
+}
+async function loadDB(){
+  try{
+    const r=await fetch("/api/dados",{headers:{"cliente_id":SESS.cliente_id,"token":SESS.token}});
+    if(r.status===403){const d=await r.json();if(d.vencida)return "vencida";}
+    if(!r.ok)return "erro";
+    const d=await r.json();
+    DB={...DEF_DB,...d.dados};
+    return "ok";
+  }catch(e){return "erro";}
+}
+
+function uid(){return Date.now()+Math.random().toString(36).slice(2,5);}
+function fmtD(s){if(!s)return"";const p=s.split("-");return`${p[2]}/${p[1]}/${p[0]}`;}
+function dias(s){return Math.ceil((new Date(s)-new Date())/(1000*60*60*24));}
+
+
+<script>
+
+// ═══════════════════════════════════════
+// TELAS DE AUTENTICAÇÃO
+// ═══════════════════════════════════════
+
+function telaLogin(){
+  const app=document.getElementById("app");
+  app.innerHTML=`
+  <div style="min-height:100vh;background:linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%);display:flex;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#fff;border-radius:16px;padding:40px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="text-align:center;margin-bottom:28px;">
+        <div style="font-size:36px;margin-bottom:8px;">⚖️</div>
+        <div style="font-size:22px;font-weight:800;color:#0B1F3A;">HJ ADV</div>
+        <div style="font-size:12px;color:#8A9BB0;margin-top:3px;">Escritório Digital</div>
+      </div>
+      <div style="display:flex;gap:3px;background:#E8EDF4;border-radius:8px;padding:3px;margin-bottom:22px;">
+        <button id="tab-login" style="flex:1;padding:8px;border-radius:6px;border:none;cursor:pointer;font-weight:700;font-size:12px;background:#fff;color:#0B1F3A;">Entrar</button>
+        <button id="tab-ativar" style="flex:1;padding:8px;border-radius:6px;border:none;cursor:pointer;font-weight:700;font-size:12px;background:transparent;color:#8A9BB0;">Ativar Licença</button>
+      </div>
+      <div id="form-login">
+        <div style="margin-bottom:14px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:5px;text-transform:uppercase;letter-spacing:.8px;">E-mail</label><input id="lg-email" type="email" placeholder="seu@email.com.br" style="width:100%;padding:10px 12px;border:1.5px solid #E8EDF4;border-radius:8px;font-size:14px;outline:none;"/></div>
+        <div style="margin-bottom:20px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:5px;text-transform:uppercase;letter-spacing:.8px;">Senha</label><input id="lg-senha" type="password" placeholder="••••••••" style="width:100%;padding:10px 12px;border:1.5px solid #E8EDF4;border-radius:8px;font-size:14px;outline:none;"/></div>
+        <button id="lg-btn" style="width:100%;padding:12px;background:#C9A84C;color:#0B1F3A;border:none;border-radius:8px;font-weight:800;font-size:15px;cursor:pointer;">Entrar</button>
+        <div id="lg-err" style="margin-top:10px;font-size:12px;color:#C0392B;text-align:center;min-height:18px;"></div>
+      </div>
+      <div id="form-ativar" style="display:none;">
+        <div style="background:rgba(201,168,76,.1);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:#a8872e;line-height:1.6;">
+          📦 Recebeu um código de ativação? Digite abaixo para criar sua conta.
+        </div>
+        <div style="margin-bottom:14px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:5px;text-transform:uppercase;letter-spacing:.8px;">Código de Ativação</label><input id="at-codigo" placeholder="HJADV-XXXX-XXXX" style="width:100%;padding:10px 12px;border:1.5px solid #E8EDF4;border-radius:8px;font-size:14px;outline:none;text-transform:uppercase;letter-spacing:2px;"/></div>
+        <button id="at-verificar" style="width:100%;padding:12px;background:#0B1F3A;color:#fff;border:none;border-radius:8px;font-weight:800;font-size:15px;cursor:pointer;">Verificar Código</button>
+        <div id="at-err" style="margin-top:10px;font-size:12px;color:#C0392B;text-align:center;min-height:18px;"></div>
+      </div>
+      <div style="text-align:center;margin-top:18px;">
+        <button id="btn-admin-acc" style="font-size:10px;color:#8A9BB0;background:none;border:none;cursor:pointer;text-decoration:underline;">Acesso admin</button>
+      </div>
+    </div>
+  </div>`;
+
+  let abaAtiva="login";
+  document.getElementById("tab-login").onclick=()=>{abaAtiva="login";document.getElementById("form-login").style.display="";document.getElementById("form-ativar").style.display="none";document.getElementById("tab-login").style.background="#fff";document.getElementById("tab-login").style.color="#0B1F3A";document.getElementById("tab-ativar").style.background="transparent";document.getElementById("tab-ativar").style.color="#8A9BB0";};
+  document.getElementById("tab-ativar").onclick=()=>{abaAtiva="ativar";document.getElementById("form-ativar").style.display="";document.getElementById("form-login").style.display="none";document.getElementById("tab-ativar").style.background="#fff";document.getElementById("tab-ativar").style.color="#0B1F3A";document.getElementById("tab-login").style.background="transparent";document.getElementById("tab-login").style.color="#8A9BB0";};
+
+  document.getElementById("lg-btn").onclick=async()=>{
+    const email=document.getElementById("lg-email").value.trim();
+    const senha=document.getElementById("lg-senha").value;
+    const err=document.getElementById("lg-err");
+    if(!email||!senha){err.textContent="Preencha e-mail e senha.";return;}
+    document.getElementById("lg-btn").textContent="Entrando...";
+    try{
+      const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,senha})});
+      const d=await r.json();
+      if(!d.ok){err.textContent=d.error||"Erro ao entrar.";document.getElementById("lg-btn").textContent="Entrar";return;}
+      SESS={cliente_id:d.cliente_id,token:d.token,nome:d.nome,email:d.email,validade:d.validade,role:"user"};
+      salvarSessao(SESS);
+      const status=await loadDB();
+      if(status==="vencida"){limparSessao();err.textContent="Licença vencida. Entre em contato.";document.getElementById("lg-btn").textContent="Entrar";return;}
+      iniciarApp();
+    }catch(e){err.textContent="Erro de conexão.";document.getElementById("lg-btn").textContent="Entrar";}
+  };
+
+  document.getElementById("lg-senha").onkeydown=e=>{if(e.key==="Enter")document.getElementById("lg-btn").click();};
+
+  document.getElementById("at-verificar").onclick=async()=>{
+    const codigo=document.getElementById("at-codigo").value.trim().toUpperCase();
+    const err=document.getElementById("at-err");
+    if(!codigo){err.textContent="Digite o código.";return;}
+    document.getElementById("at-verificar").textContent="Verificando...";
+    try{
+      const r=await fetch("/api/auth/verificar-codigo",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({codigo})});
+      const d=await r.json();
+      if(!d.ok){err.textContent=d.error||"Código inválido.";document.getElementById("at-verificar").textContent="Verificar Código";return;}
+      if(d.tem_senha){err.style.color="#1A7A4A";err.textContent="Licença ativa! Use a aba Entrar com seu e-mail e senha.";document.getElementById("at-verificar").textContent="Verificar Código";return;}
+      telaCriarSenha(codigo, d.nome, d.email);
+    }catch(e){err.textContent="Erro de conexão.";document.getElementById("at-verificar").textContent="Verificar Código";}
+  };
+
+  document.getElementById("btn-admin-acc").onclick=()=>telaAdminLogin();
+
+  // Tentar sessão salva
+  const sess=getSessaoSalva();
+  if(sess&&sess.cliente_id){
+    SESS=sess;
+    loadDB().then(status=>{
+      if(status==="ok")iniciarApp();
+      else{limparSessao();telaLogin();}
+    });
+  }
+}
+
+function telaCriarSenha(codigo, nome, email){
+  const app=document.getElementById("app");
+  app.innerHTML=`
+  <div style="min-height:100vh;background:linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%);display:flex;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#fff;border-radius:16px;padding:40px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="font-size:36px;margin-bottom:8px;">🎉</div>
+        <div style="font-size:18px;font-weight:800;color:#0B1F3A;">Bem-vindo(a), ${nome}!</div>
+        <div style="font-size:12px;color:#8A9BB0;margin-top:4px;">Crie sua senha para acessar o sistema</div>
+      </div>
+      <div style="background:#E8EDF4;border-radius:8px;padding:12px;margin-bottom:18px;font-size:12px;color:#0B1F3A;">
+        📧 <strong>E-mail:</strong> ${email}
+      </div>
+      <div style="margin-bottom:14px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:5px;text-transform:uppercase;">Nova Senha</label><input id="cs-senha1" type="password" placeholder="Mínimo 6 caracteres" style="width:100%;padding:10px 12px;border:1.5px solid #E8EDF4;border-radius:8px;font-size:14px;outline:none;"/></div>
+      <div style="margin-bottom:20px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:5px;text-transform:uppercase;">Confirmar Senha</label><input id="cs-senha2" type="password" placeholder="Repita a senha" style="width:100%;padding:10px 12px;border:1.5px solid #E8EDF4;border-radius:8px;font-size:14px;outline:none;"/></div>
+      <button id="cs-btn" style="width:100%;padding:12px;background:#C9A84C;color:#0B1F3A;border:none;border-radius:8px;font-weight:800;font-size:15px;cursor:pointer;">Criar Senha e Entrar</button>
+      <div id="cs-err" style="margin-top:10px;font-size:12px;color:#C0392B;text-align:center;min-height:18px;"></div>
+    </div>
+  </div>`;
+
+  document.getElementById("cs-btn").onclick=async()=>{
+    const s1=document.getElementById("cs-senha1").value;
+    const s2=document.getElementById("cs-senha2").value;
+    const err=document.getElementById("cs-err");
+    if(!s1||!s2){err.textContent="Preencha os dois campos.";return;}
+    if(s1!==s2){err.textContent="As senhas não coincidem.";return;}
+    if(s1.length<6){err.textContent="Senha muito curta (mín. 6 caracteres).";return;}
+    document.getElementById("cs-btn").textContent="Criando...";
+    try{
+      const r=await fetch("/api/auth/criar-senha",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({codigo,senha:s1})});
+      const d=await r.json();
+      if(!d.ok){err.textContent=d.error||"Erro ao criar senha.";document.getElementById("cs-btn").textContent="Criar Senha e Entrar";return;}
+      // Login automático
+      const r2=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,senha:s1})});
+      const d2=await r2.json();
+      if(d2.ok){
+        SESS={cliente_id:d2.cliente_id,token:d2.token,nome:d2.nome,email:d2.email,validade:d2.validade,role:"user"};
+        salvarSessao(SESS);
+        await loadDB();
+        iniciarApp();
+      }
+    }catch(e){err.textContent="Erro de conexão.";document.getElementById("cs-btn").textContent="Criar Senha e Entrar";}
+  };
+}
+
+// ═══════════════════════════════════════
+// PAINEL ADMIN (HENRY — gerencia clientes)
+// ═══════════════════════════════════════
+function telaAdminLogin(){
+  const app=document.getElementById("app");
+  app.innerHTML=`
+  <div style="min-height:100vh;background:linear-gradient(135deg,#0B1F3A 0%,#1a3a5c 100%);display:flex;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#fff;border-radius:16px;padding:40px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="font-size:32px;margin-bottom:8px;">🔐</div>
+        <div style="font-size:18px;font-weight:800;color:#0B1F3A;">Painel Admin</div>
+        <div style="font-size:11px;color:#8A9BB0;margin-top:3px;">Acesso exclusivo do proprietário</div>
+      </div>
+      <div style="margin-bottom:14px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:5px;text-transform:uppercase;">E-mail Admin</label><input id="adm-email" type="email" style="width:100%;padding:10px 12px;border:1.5px solid #E8EDF4;border-radius:8px;font-size:14px;outline:none;"/></div>
+      <div style="margin-bottom:20px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:5px;text-transform:uppercase;">Senha</label><input id="adm-senha" type="password" style="width:100%;padding:10px 12px;border:1.5px solid #E8EDF4;border-radius:8px;font-size:14px;outline:none;"/></div>
+      <button id="adm-btn" style="width:100%;padding:12px;background:#0B1F3A;color:#C9A84C;border:none;border-radius:8px;font-weight:800;font-size:15px;cursor:pointer;">Acessar Painel</button>
+      <div id="adm-err" style="margin-top:10px;font-size:12px;color:#C0392B;text-align:center;min-height:18px;"></div>
+      <button onclick="telaLogin()" style="margin-top:14px;width:100%;padding:8px;background:transparent;border:1.5px solid #E8EDF4;border-radius:8px;font-size:12px;color:#8A9BB0;cursor:pointer;">← Voltar ao Login</button>
+    </div>
+  </div>`;
+
+  document.getElementById("adm-btn").onclick=async()=>{
+    const email=document.getElementById("adm-email").value.trim();
+    const senha=document.getElementById("adm-senha").value;
+    const err=document.getElementById("adm-err");
+    document.getElementById("adm-btn").textContent="Verificando...";
+    try{
+      const r=await fetch("/api/admin/clientes",{headers:{"admin_email":email,"admin_senha":senha}});
+      if(!r.ok){const d=await r.json();err.textContent=d.error||"Acesso negado.";document.getElementById("adm-btn").textContent="Acessar Painel";return;}
+      const d=await r.json();
+      SESS={role:"master",admin_email:email,admin_senha:senha};
+      painelAdmin(d.clientes);
+    }catch(e){err.textContent="Erro de conexão.";document.getElementById("adm-btn").textContent="Acessar Painel";}
+  };
+}
+
+async function painelAdmin(clientes){
+  const app=document.getElementById("app");
+  const sess=SESS;
+
+  async function recarregar(){
+    const r=await fetch("/api/admin/clientes",{headers:{"admin_email":sess.admin_email,"admin_senha":sess.admin_senha}});
+    const d=await r.json();
+    painelAdmin(d.clientes);
+  }
+
+  app.innerHTML=`
+  <div style="min-height:100vh;background:#F0EDE6;">
+    <div style="background:#0B1F3A;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;">
+      <div style="color:#C9A84C;font-weight:800;font-size:18px;">⚖️ HJ ADV — Painel Admin</div>
+      <button onclick="telaLogin()" style="padding:6px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:7px;color:#fff;cursor:pointer;font-size:12px;">Sair</button>
+    </div>
+    <div style="padding:24px;max-width:1000px;margin:0 auto;">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px;">
+        ${[{l:"Total de Clientes",v:clientes.length,i:"👥"},{l:"Ativos",v:clientes.filter(c=>c.ativo).length,i:"✅"},{l:"Vencidos/Inativos",v:clientes.filter(c=>!c.ativo||( c.validade&&new Date(c.validade)<new Date())).length,i:"⚠️"}].map(x=>`
+        <div style="background:#fff;border-radius:11px;padding:16px;border:1px solid #E8EDF4;display:flex;align-items:center;gap:12px;">
+          <div style="font-size:24px;">${x.i}</div>
+          <div><div style="font-size:22px;font-weight:800;color:#0B1F3A;">${x.v}</div><div style="font-size:11px;color:#8A9BB0;">${x.l}</div></div>
+        </div>`).join("")}
+      </div>
+      <div style="background:#fff;border-radius:11px;border:1px solid #E8EDF4;margin-bottom:22px;">
+        <div style="padding:16px 20px;border-bottom:1px solid #E8EDF4;display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:15px;font-weight:700;color:#0B1F3A;">Clientes</div>
+          <button id="novo-cliente-btn" style="padding:8px 16px;background:#C9A84C;color:#0B1F3A;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">+ Novo Cliente</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr style="background:#0B1F3A;">${["Nome","E-mail","Código","Validade","Status","Ações"].map(h=>`<th style="padding:10px 14px;color:#C9A84C;font-size:10px;text-align:left;text-transform:uppercase;">${h}</th>`).join("")}</tr></thead>
+            <tbody>
+              ${clientes.length===0?`<tr><td colspan="6" style="padding:20px;text-align:center;color:#8A9BB0;font-size:12px;">Nenhum cliente cadastrado.</td></tr>`:""}
+              ${clientes.map((c,i)=>{
+                const vencida=c.validade&&new Date(c.validade)<new Date();
+                const statusTxt=!c.ativo?"Inativo":vencida?"Vencida":"Ativo";
+                const statusC=!c.ativo?"#C0392B":vencida?"#e67e22":"#1A7A4A";
+                return `<tr style="border-bottom:1px solid #E8EDF4;background:${i%2===0?"#fff":"#fafbfd"};">
+                  <td style="padding:10px 14px;font-size:13px;font-weight:600;">${c.nome}</td>
+                  <td style="padding:10px 14px;font-size:12px;color:#8A9BB0;">${c.email}</td>
+                  <td style="padding:10px 14px;"><code style="background:#E8EDF4;padding:3px 7px;border-radius:5px;font-size:12px;letter-spacing:1px;">${c.codigo}</code></td>
+                  <td style="padding:10px 14px;font-size:12px;">${c.validade?fmtD(c.validade):"Sem validade"}</td>
+                  <td style="padding:10px 14px;"><span style="background:${statusC}18;color:${statusC};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;">${statusTxt}</span></td>
+                  <td style="padding:10px 14px;display:flex;gap:5px;flex-wrap:wrap;">
+                    <button data-renovar="${c.id}" style="padding:4px 9px;background:#1A7A4A18;color:#1A7A4A;border:1px solid #1A7A4A30;border-radius:6px;cursor:pointer;font-size:11px;">Renovar</button>
+                    <button data-toggle="${c.id}" data-ativo="${c.ativo}" style="padding:4px 9px;background:${c.ativo?"#C0392B18":"#1A7A4A18"};color:${c.ativo?"#C0392B":"#1A7A4A"};border:1px solid ${c.ativo?"#C0392B30":"#1A7A4A30"};border-radius:6px;cursor:pointer;font-size:11px;">${c.ativo?"Desativar":"Ativar"}</button>
+                    <button data-novocodigo="${c.id}" style="padding:4px 9px;background:#2980B918;color:#2980B9;border:1px solid #2980B930;border-radius:6px;cursor:pointer;font-size:11px;">Novo Código</button>
+                    <button data-deletar="${c.id}" data-nome="${c.nome}" style="padding:4px 9px;background:#E8EDF4;color:#8A9BB0;border:1px solid #E8EDF4;border-radius:6px;cursor:pointer;font-size:11px;">×</button>
+                  </td>
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  document.getElementById("novo-cliente-btn").onclick=()=>modalNovoCliente(sess,recarregar);
+
+  document.querySelectorAll("[data-renovar]").forEach(b=>{b.onclick=()=>modalRenovar(b.dataset.renovar,sess,recarregar);});
+  document.querySelectorAll("[data-toggle]").forEach(b=>{b.onclick=async()=>{
+    const ativo=b.dataset.ativo==="1"?0:1;
+    await fetch("/api/admin/clientes/"+b.dataset.toggle,{method:"PATCH",headers:{"Content-Type":"application/json","admin_email":sess.admin_email,"admin_senha":sess.admin_senha},body:JSON.stringify({ativo})});
+    recarregar();
+  };});
+  document.querySelectorAll("[data-novocodigo]").forEach(b=>{b.onclick=async()=>{
+    if(!confirm("Gerar novo código? O código atual será invalidado e a senha será resetada."))return;
+    const r=await fetch("/api/admin/clientes/"+b.dataset.novocodigo+"/novo-codigo",{method:"POST",headers:{"admin_email":sess.admin_email,"admin_senha":sess.admin_senha}});
+    const d=await r.json();
+    if(d.ok)alert("Novo código gerado:\n\n"+d.codigo+"\n\nEnvie ao cliente.");
+    recarregar();
+  };});
+  document.querySelectorAll("[data-deletar]").forEach(b=>{b.onclick=async()=>{
+    if(!confirm("Deletar cliente "+b.dataset.nome+"? Todos os dados serão apagados permanentemente."))return;
+    await fetch("/api/admin/clientes/"+b.dataset.deletar,{method:"DELETE",headers:{"admin_email":sess.admin_email,"admin_senha":sess.admin_senha}});
+    recarregar();
+  };});
+}
+
+function modalNovoCliente(sess, cb){
+  const div=document.createElement("div");
+  div.id="modal-nc";
+  div.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;";
+  div.innerHTML=`
+  <div style="background:#fff;border-radius:14px;padding:28px;width:100%;max-width:440px;">
+    <div style="font-size:16px;font-weight:800;color:#0B1F3A;margin-bottom:18px;">➕ Novo Cliente</div>
+    <div style="margin-bottom:12px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:4px;">NOME DO ESCRITÓRIO *</label><input id="nc-nome" placeholder="Silva & Associados Advocacia" style="width:100%;padding:9px 11px;border:1.5px solid #E8EDF4;border-radius:7px;font-size:13px;outline:none;"/></div>
+    <div style="margin-bottom:12px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:4px;">E-MAIL *</label><input id="nc-email" type="email" placeholder="contato@escritorio.com.br" style="width:100%;padding:9px 11px;border:1.5px solid #E8EDF4;border-radius:7px;font-size:13px;outline:none;"/></div>
+    <div style="margin-bottom:18px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:4px;">VALIDADE DA LICENÇA</label><input id="nc-val" type="date" style="width:100%;padding:9px 11px;border:1.5px solid #E8EDF4;border-radius:7px;font-size:13px;outline:none;"/></div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('modal-nc').remove()" style="flex:1;padding:10px;background:transparent;border:1.5px solid #E8EDF4;border-radius:8px;cursor:pointer;font-size:13px;">Cancelar</button>
+      <button id="nc-save" style="flex:2;padding:10px;background:#C9A84C;color:#0B1F3A;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">Criar e Gerar Código</button>
+    </div>
+    <div id="nc-result" style="margin-top:12px;min-height:16px;font-size:12px;"></div>
+  </div>`;
+  document.body.appendChild(div);
+
+  document.getElementById("nc-save").onclick=async()=>{
+    const nome=document.getElementById("nc-nome").value.trim();
+    const email=document.getElementById("nc-email").value.trim();
+    const val=document.getElementById("nc-val").value;
+    if(!nome||!email){document.getElementById("nc-result").style.color="#C0392B";document.getElementById("nc-result").textContent="Nome e e-mail são obrigatórios.";return;}
+    document.getElementById("nc-save").textContent="Criando...";
+    const r=await fetch("/api/admin/clientes",{method:"POST",headers:{"Content-Type":"application/json","admin_email":sess.admin_email,"admin_senha":sess.admin_senha},body:JSON.stringify({nome,email,validade:val||null})});
+    const d=await r.json();
+    if(!d.ok){document.getElementById("nc-result").style.color="#C0392B";document.getElementById("nc-result").textContent=d.error;document.getElementById("nc-save").textContent="Criar e Gerar Código";return;}
+    document.getElementById("nc-result").style.color="#1A7A4A";
+    document.getElementById("nc-result").innerHTML=`✅ Cliente criado!<br><strong>Código:</strong> <code style="background:#E8EDF4;padding:2px 6px;border-radius:4px;letter-spacing:1px;">${d.codigo}</code><br><small>Envie este código ao cliente.</small>`;
+    document.getElementById("nc-save").textContent="✅ Criado!";
+    setTimeout(()=>{document.getElementById("modal-nc")?.remove();cb();},3000);
+  };
+}
+
+function modalRenovar(id, sess, cb){
+  const div=document.createElement("div");
+  div.id="modal-rv";
+  div.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;";
+  div.innerHTML=`
+  <div style="background:#fff;border-radius:14px;padding:28px;width:100%;max-width:360px;">
+    <div style="font-size:16px;font-weight:800;color:#0B1F3A;margin-bottom:16px;">🔄 Renovar Licença</div>
+    <div style="margin-bottom:16px;"><label style="display:block;font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:4px;">NOVA DATA DE VALIDADE</label><input id="rv-val" type="date" style="width:100%;padding:9px 11px;border:1.5px solid #E8EDF4;border-radius:7px;font-size:13px;outline:none;"/></div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('modal-rv').remove()" style="flex:1;padding:10px;background:transparent;border:1.5px solid #E8EDF4;border-radius:8px;cursor:pointer;font-size:13px;">Cancelar</button>
+      <button id="rv-save" style="flex:2;padding:10px;background:#1A7A4A;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">Renovar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(div);
+  document.getElementById("rv-save").onclick=async()=>{
+    const val=document.getElementById("rv-val").value;
+    if(!val){alert("Selecione a data.");return;}
+    await fetch("/api/admin/clientes/"+id,{method:"PATCH",headers:{"Content-Type":"application/json","admin_email":sess.admin_email,"admin_senha":sess.admin_senha},body:JSON.stringify({ativo:1,validade:val})});
+    document.getElementById("modal-rv").remove();
+    cb();
+  };
+}
+
+function fmtR(n){return"R$ "+Number(n||0).toLocaleString("pt-BR",{minimumFractionDigits:2});}
+
+// ═══ API IA — chama SEU backend ═══
+async function apiIA(system, messages){
+  const headers = {"Content-Type":"application/json"};
+  if(SESS&&SESS.cliente_id){headers["cliente_id"]=SESS.cliente_id;headers["token"]=SESS.token;}
+  const res = await fetch(API_URL, {
+    method:"POST",
+    headers,
+    body:JSON.stringify({system, messages, max_tokens:2000})
+  });
+  const j = await res.json();
+  if(j.error) throw new Error(j.error);
+  return j.text;
+}
+
+// ═══ RENDERIZAÇÃO ═══
+function iniciarApp(){
+  render();
+}
+function render(){
+  const app = document.getElementById("app");
+  if(!SESS){ telaLogin(); return; }
+  app.innerHTML = renderLayout();
+  bindNav();
+  renderPage();
+}
+
+// ── LOGIN ──
+function renderLogin(){
+  const logins=[...DB.advogados.map(a=>a.login||""),...DB.estagiarios.map(e=>e.login||"")].filter(Boolean);
+  return`<div style="min-height:100vh;background:${C.navy};display:flex;align-items:center;justify-content:center;">
+  <div style="background:rgba(255,255,255,.05);border:1px solid rgba(201,168,76,.25);border-radius:18px;padding:44px 40px;width:360px;max-width:95vw;text-align:center;">
+    <div style="font-size:28px;font-weight:700;color:${C.gold};letter-spacing:2px;margin-bottom:4px;">HJ ADV</div>
+    <div style="font-family:sans-serif;font-size:9px;color:rgba(255,255,255,.3);letter-spacing:3px;text-transform:uppercase;margin-bottom:30px;">Escritório Digital</div>
+    <div style="margin-bottom:11px;text-align:left;">
+      <label style="font-family:sans-serif;font-size:10px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;display:block;margin-bottom:4px;">Usuário</label>
+      <input id="lu" placeholder="login" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.07);border:1.5px solid rgba(201,168,76,.2);border-radius:8px;color:#fff;font-family:sans-serif;font-size:14px;outline:none;box-sizing:border-box;"/>
+    </div>
+    <div style="margin-bottom:14px;text-align:left;">
+      <label style="font-family:sans-serif;font-size:10px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;display:block;margin-bottom:4px;">Senha</label>
+      <input id="lp" type="password" placeholder="••••••" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.07);border:1.5px solid rgba(201,168,76,.2);border-radius:8px;color:#fff;font-family:sans-serif;font-size:14px;outline:none;box-sizing:border-box;"/>
+    </div>
+    <button id="lbtn" style="width:100%;padding:12px;background:${C.gold};color:${C.navy};font-family:sans-serif;font-weight:800;font-size:14px;border-radius:8px;border:none;cursor:pointer;">Entrar</button>
+    <div id="lerr" style="font-family:sans-serif;font-size:12px;color:#e74c3c;margin-top:8px;display:none;">Usuário ou senha incorretos.</div>
+    <div style="margin-top:16px;padding-top:13px;border-top:1px solid rgba(255,255,255,.07);font-family:sans-serif;font-size:10px;color:rgba(255,255,255,.25);line-height:1.7;">
+      Logins: admin${logins.length?", "+logins.join(", "):""}<br/>Senha padrão: 1234
+    </div>
+  </div></div>`;
+}
+function bindLogin(){
+  const tentar=()=>{
+    const u=document.getElementById("lu").value.trim().toLowerCase();
+    const p=document.getElementById("lp").value;
+    if(u==="admin"&&p===DB.adminPass){SESS={nome:"Administrador",role:"admin"};render();return;}
+    const a=DB.advogados.find(x=>(x.login||"").toLowerCase()===u&&x.senha===p);
+    if(a){SESS={nome:a.nome,role:"advogado"};render();return;}
+    const e=DB.estagiarios.find(x=>(x.login||"").toLowerCase()===u&&x.senha===p);
+    if(e){SESS={nome:e.nome,role:"estagiario"};render();return;}
+    document.getElementById("lerr").style.display="block";
+    setTimeout(()=>document.getElementById("lerr").style.display="none",3000);
+  };
+  document.getElementById("lbtn").onclick=tentar;
+  document.getElementById("lp").onkeydown=e=>{if(e.key==="Enter")tentar();};
+  document.getElementById("lu").onkeydown=e=>{if(e.key==="Enter")document.getElementById("lp").focus();};
+}
+
+// ── LAYOUT ──
+const MENU_ADMIN=[{id:"dashboard",l:"Painel",i:"🏛",s:null},{id:"clientes",l:"Clientes",i:"👤",s:"EQUIPE"},{id:"advogados",l:"Advogados",i:"⚖️",s:null},{id:"estagiarios",l:"Estagiários",i:"📚",s:null},{id:"processos",l:"Processos",i:"📋",s:"JURÍDICO"},{id:"prazos",l:"Prazos",i:"⏰",s:null},{id:"juris",l:"Jurisprudências",i:"📖",s:null},{id:"financeiro",l:"Financeiro",i:"💰",s:"GESTÃO"},{id:"pecas",l:"Peças Processuais",i:"📄",s:null},{id:"videochamada",l:"Videochamada",i:"📹",s:null},{id:"roteiros",l:"Roteiros",i:"🗣️",s:"CAPTAÇÃO"},{id:"captacao",l:"Captação WA",i:"📱",s:null},{id:"degravacao",l:"Degravação IA",i:"🎙️",s:"IA"},{id:"ia",l:"Assistente IA",i:"🤖",s:null},{id:"whatsapp",l:"Bot WhatsApp",i:"💬",s:"COMUNICAÇÃO"},{id:"config",l:"Configurações",i:"⚙️",s:"SISTEMA"}];
+const MENU_USER=[{id:"dashboard",l:"Painel",i:"🏛",s:null},{id:"processos",l:"Processos",i:"📋",s:"JURÍDICO"},{id:"prazos",l:"Prazos",i:"⏰",s:null},{id:"juris",l:"Jurisprudências",i:"📖",s:null},{id:"pecas",l:"Peças Processuais",i:"📄",s:null},{id:"videochamada",l:"Videochamada",i:"📹",s:null},{id:"degravacao",l:"Degravação IA",i:"🎙️",s:"FERRAMENTAS"},{id:"ia",l:"Assistente IA",i:"🤖",s:null}];
+
+function renderLayout(){
+  const menu=SESS.role==="admin"?MENU_ADMIN:MENU_USER;
+  const itens=menu.map(m=>`
+    ${m.s?`<div style="font-family:sans-serif;font-size:8px;font-weight:700;color:rgba(255,255,255,.2);text-transform:uppercase;letter-spacing:1.5px;padding:9px 12px 3px;">${m.s}</div>`:""}
+    <button data-aba="${m.id}" style="width:100%;display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:6px;border:none;cursor:pointer;margin-bottom:1px;background:${ABA===m.id?"rgba(201,168,76,.17)":"transparent"};color:${ABA===m.id?C.gold:"rgba(255,255,255,.45)"};font-family:sans-serif;font-size:12px;font-weight:${ABA===m.id?700:400};text-align:left;">
+      <span style="font-size:12px;width:14px;text-align:center;flex-shrink:0;">${m.i}</span>${m.l}
+      ${ABA===m.id?`<span style="margin-left:auto;width:4px;height:4px;border-radius:50%;background:${C.gold};flex-shrink:0;"></span>`:""}
+    </button>`).join("");
+  return`
+  <div style="display:flex;min-height:100vh;">
+    <div style="width:240px;background:${C.navy};height:100vh;position:fixed;left:0;top:0;display:flex;flex-direction:column;border-right:1px solid rgba(201,168,76,.15);z-index:100;overflow:hidden;">
+      <div style="padding:18px 18px 11px;border-bottom:1px solid rgba(201,168,76,.12);">
+        <div style="font-size:19px;font-weight:700;color:${C.gold};letter-spacing:1px;">HJ ADV</div>
+        <div style="font-family:sans-serif;font-size:8px;color:rgba(255,255,255,.25);letter-spacing:2px;text-transform:uppercase;margin-top:2px;">Escritório Digital</div>
+      </div>
+      <div style="padding:7px 18px;border-bottom:1px solid rgba(201,168,76,.07);display:flex;align-items:center;gap:7px;">
+        <div style="width:26px;height:26px;border-radius:50%;background:rgba(201,168,76,.2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${C.gold};flex-shrink:0;">${SESS.nome.charAt(0)}</div>
+        <div><div style="font-family:sans-serif;font-size:11px;font-weight:700;color:#fff;">${SESS.nome}</div><div style="font-family:sans-serif;font-size:8px;color:rgba(255,255,255,.3);">${SESS.role==="admin"?"Administrador":SESS.role==="advogado"?"Advogado":"Estagiário"}</div></div>
+      </div>
+      <nav style="flex:1;padding:7px 6px;overflow-y:auto;">${itens}</nav>
+      <div style="padding:9px 12px;border-top:1px solid rgba(201,168,76,.08);">
+        <button id="sair" style="width:100%;padding:6px 9px;background:rgba(192,57,43,.1);border:1px solid rgba(192,57,43,.2);border-radius:5px;color:#e74c3c;font-family:sans-serif;font-size:11px;font-weight:700;cursor:pointer;">⏏ Sair</button>
+        <div style="font-family:sans-serif;font-size:8px;color:rgba(255,255,255,.12);margin-top:5px;text-align:center;">HJ ADV © 2025</div>
+      </div>
+    </div>
+    <div style="margin-left:240px;flex:1;padding:26px 30px;min-height:100vh;">
+      <div id="pagina"></div>
+    </div>
+  </div>`;
+}
+function bindNav(){
+  document.getElementById("sair").onclick=()=>{limparSessao();ABA="dashboard";telaLogin();};
+  document.querySelectorAll("[data-aba]").forEach(btn=>{
+    btn.onclick=()=>{ABA=btn.dataset.aba;render();};
+  });
+}
+function renderPage(){
+  const pg=document.getElementById("pagina");
+  const pages={dashboard:pgDashboard,advogados:pgAdvogados,estagiarios:pgEstagiarios,clientes:pgClientes,processos:pgProcessos,prazos:pgPrazos,juris:pgJuris,financeiro:pgFinanceiro,pecas:pgPecas,videochamada:pgVideochamada,roteiros:pgRoteiros,captacao:pgCaptacao,degravacao:pgDegravacao,ia:pgIA,whatsapp:pgWhatsApp,config:pgConfig};
+  if(pages[ABA]) pages[ABA](pg);
+  else pgDashboard(pg);
+}
+
+// ── COMPONENTES HTML ──
+function badge(txt){
+  const m={"Em andamento":"#2980B9","Aguardando audiência":"#8E44AD","Aguardando sentença":"#e67e22","Recurso":"#e67e22","Concluído":"#1A7A4A","Arquivado":"#8A9BB0","Alta":"#C0392B","Média":"#e67e22","Baixa":"#1A7A4A","Civil":"#2980B9","Penal":"#C0392B","Família":"#8E44AD","Trabalhista":"#e67e22","Trânsito":"#a8872e","Administrativo":"#8A9BB0","Pareceres":"#a8872e","Processual Civil":"#2980B9","Processual Penal":"#C0392B","Honorários":"#1A7A4A","Aporte":"#2980B9","Pagamento Dativo":"#8E44AD","Nota Fiscal":"#a8872e","Despesa":"#C0392B","Outros":"#8A9BB0"};
+  const col=m[txt]||"#8A9BB0";
+  return`<span style="background:${col}22;color:${col};border:1px solid ${col}44;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;font-family:sans-serif;white-space:nowrap;">${txt}</span>`;
+}
+function card(html,extra=""){return`<div style="background:#fff;border-radius:11px;box-shadow:0 2px 10px rgba(11,31,58,.05);border:1px solid ${C.gray2};padding:20px;${extra}">${html}</div>`;}
+function btn(txt,id,variant="gold",sm=false){const vs={gold:`background:${C.gold};color:${C.navy}`,navy:`background:${C.navy};color:#fff`,ghost:`background:transparent;color:${C.navy};border:1.5px solid ${C.gray2}`,danger:`background:rgba(192,57,43,.1);color:${C.red};border:1px solid rgba(192,57,43,.2)`};return`<button id="${id}" style="font-family:sans-serif;font-weight:700;border-radius:7px;border:none;cursor:pointer;padding:${sm?"5px 10px":"8px 15px"};font-size:${sm?11:13}px;${vs[variant]||vs.gold}">${txt}</button>`;}
+function inp(label,id,type="text",val="",ph=""){return`<div style="margin-bottom:11px;"><label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;letter-spacing:.8px;">${label}</label><input id="${id}" type="${type}" value="${val||""}" placeholder="${ph||""}" style="width:100%;padding:8px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:13px;font-family:sans-serif;color:${C.text};outline:none;box-sizing:border-box;"/></div>`;}
+function sel(label,id,opts,val=""){return`<div style="margin-bottom:11px;"><label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;letter-spacing:.8px;">${label}</label><select id="${id}" style="width:100%;padding:8px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:13px;font-family:sans-serif;color:${C.text};outline:none;background:#fff;box-sizing:border-box;"><option value="">—</option>${opts.map(o=>`<option value="${o}"${val===o?" selected":""}>${o}</option>`).join("")}</select></div>`;}
+function modal(id,title,body,w=500){return`<div id="${id}-overlay" onclick="if(event.target===this)document.getElementById('${id}-overlay').remove();" style="position:fixed;inset:0;background:rgba(11,31,58,.55);z-index:1000;display:flex;align-items:center;justify-content:center;"><div style="background:#fff;border-radius:13px;padding:26px;width:${w}px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.22);"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;"><h2 style="color:${C.navy};font-size:16px;font-family:Georgia,serif;margin:0;">${title}</h2><button onclick="document.getElementById('${id}-overlay').remove();" style="background:none;border:none;font-size:21px;cursor:pointer;color:${C.gray};">×</button></div>${body}</div></div>`;}
+function openModal(html){document.body.insertAdjacentHTML("beforeend",html);}
+
+// ── DASHBOARD ──
+function pgDashboard(el){
+  const ativ=DB.processos.filter(p=>["Em andamento","Aguardando audiência","Aguardando sentença","Recurso"].includes(p.status)).length;
+  const enc=DB.processos.filter(p=>["Concluído","Arquivado"].includes(p.status)).length;
+  const pend=DB.prazos.filter(p=>!p.done);
+  const ent=DB.financeiro.filter(f=>f.valor>0).reduce((a,f)=>a+f.valor,0);
+  const sai=DB.financeiro.filter(f=>f.valor<0).reduce((a,f)=>a+Math.abs(f.valor),0);
+  const stats=[{l:"Advogados",v:DB.advogados.length,i:"⚖️",c:C.navy},{l:"Estagiários",v:DB.estagiarios.length,i:"📚",c:C.blue},{l:"Processos Ativos",v:ativ,i:"📋",c:C.blue},{l:"Encerrados",v:enc,i:"✅",c:C.green},{l:"Total Processos",v:DB.processos.length,i:"🗂",c:C.gold3},{l:"Prazos Pendentes",v:pend.length,i:"⏰",c:C.red}];
+  const prox=[...pend].sort((a,b)=>new Date(a.data)-new Date(b.data)).slice(0,5);
+  el.innerHTML=`
+  <h1 style="font-size:22px;color:${C.navy};margin-bottom:4px;">🏛 Painel Principal</h1>
+  <p style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-bottom:16px;">${new Date().toLocaleDateString("pt-BR",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px;margin-bottom:16px;">
+    ${stats.map(s=>`<div style="background:#fff;border-radius:9px;border:1px solid ${C.gray2};border-left:4px solid ${s.c};padding:12px 14px;display:flex;align-items:center;gap:9px;"><span style="font-size:20px;">${s.i}</span><div><div style="font-family:sans-serif;font-size:18px;font-weight:800;color:${s.c};line-height:1;">${s.v}</div><div style="font-family:sans-serif;font-size:9px;color:${C.gray};margin-top:1px;">${s.l}</div></div></div>`).join("")}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:16px;">
+    ${[{l:"Entradas",v:fmtR(ent),i:"💵",c:C.green},{l:"Saídas",v:fmtR(sai),i:"📤",c:C.red},{l:"Saldo",v:fmtR(ent-sai),i:"💼",c:(ent-sai)>=0?C.navy:C.red}].map(f=>`<div style="background:#fff;border-radius:9px;border:1px solid ${C.gray2};padding:12px 14px;display:flex;align-items:center;gap:10px;"><div style="width:32px;height:32px;border-radius:7px;background:${f.c}18;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">${f.i}</div><div><div style="font-family:sans-serif;font-size:15px;font-weight:800;color:${f.c};">${f.v}</div><div style="font-family:sans-serif;font-size:9px;color:${C.gray};">${f.l}</div></div></div>`).join("")}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    ${card(`<div style="font-size:13px;color:${C.navy};margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};font-weight:600;">⏰ Próximos Prazos</div>
+      ${prox.length===0?`<p style="font-family:sans-serif;font-size:12px;color:${C.gray};">Nenhum prazo pendente ✅</p>`:prox.map(p=>{const d=dias(p.data),cor=d<=3?C.red:d<=7?C.orange:C.gold3;return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid ${C.gray2};"><div><div style="font-family:sans-serif;font-weight:600;font-size:12px;">${p.ev}</div><div style="font-family:sans-serif;font-size:10px;color:${C.gray};">${p.cli}·${fmtD(p.data)}</div></div><span style="background:${cor}22;color:${cor};border:1px solid ${cor}44;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;font-family:sans-serif;">${d<0?"VENC":d===0?"HOJE":d+"d"}</span></div>`;}).join("")}`)}
+    ${card(`<div style="font-size:13px;color:${C.navy};margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};font-weight:600;">📋 Processos Recentes</div>
+      ${[...DB.processos].reverse().slice(0,5).map(p=>`<div style="padding:7px 0;border-bottom:1px solid ${C.gray2};"><div style="display:flex;justify-content:space-between;"><span style="font-family:sans-serif;font-weight:600;font-size:12px;">${p.cli}</span>${badge(p.status)}</div><div style="font-family:monospace;font-size:9px;color:${C.gray};">${p.num}</div></div>`).join("")}`)}
+  </div>`;
+}
+
+// ── PROCESSOS ──
+function pgProcessos(el){
+  let busca="",fArea="",fSt="";
+  function draw(){
+    const fil=DB.processos.filter(p=>(!busca||(p.cli.toLowerCase().includes(busca)||p.num.includes(busca)))&&(!fArea||p.area===fArea)&&(!fSt||p.status===fSt));
+    el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h1 style="font-size:22px;color:${C.navy};">📋 Processos</h1>
+      ${btn("+ Novo","pnovo")}
+    </div>
+    <div style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;">
+      <input id="pbusca" value="${busca}" placeholder="Buscar cliente ou número..." style="flex:1;min-width:150px;padding:7px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-family:sans-serif;font-size:12px;outline:none;"/>
+      <select id="pfarea" style="padding:7px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-family:sans-serif;font-size:12px;outline:none;"><option value="">Todas as áreas</option>${AREAS.map(a=>`<option${fArea===a?" selected":""}>${a}</option>`).join("")}</select>
+      <select id="pfst" style="padding:7px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-family:sans-serif;font-size:12px;outline:none;"><option value="">Todos os status</option>${STATUS_PROC.map(s=>`<option${fSt===s?" selected":""}>${s}</option>`).join("")}</select>
+    </div>
+    <div style="background:#fff;border-radius:11px;box-shadow:0 2px 10px rgba(11,31,58,.05);border:1px solid ${C.gray2};overflow:hidden;">
+      <table><thead><tr style="background:${C.navy};">${["Cliente","Número","Área","Tribunal","Advogado","Status","Ações"].map(h=>`<th style="padding:9px 12px;color:${C.gold};font-size:9px;font-weight:700;text-align:left;text-transform:uppercase;">${h}</th>`).join("")}</tr></thead>
+      <tbody>${fil.map((p,i)=>`<tr style="border-bottom:1px solid ${C.gray2};background:${i%2===0?"#fff":"#fafbfd"};">
+        <td style="padding:8px 12px;font-weight:600;font-size:12px;">${p.cli}</td>
+        <td style="padding:8px 12px;font-family:monospace;font-size:10px;color:${C.gray};">${p.num}</td>
+        <td style="padding:8px 12px;">${badge(p.area)}</td>
+        <td style="padding:8px 12px;font-size:11px;color:${C.gray};">${p.trib||"—"}</td>
+        <td style="padding:8px 12px;font-size:11px;">${p.adv||"—"}</td>
+        <td style="padding:8px 12px;">${badge(p.status)}</td>
+        <td style="padding:8px 12px;"><div style="display:flex;gap:4px;">
+          ${btn("✏️","pedit-"+p.id,"ghost",true)}
+          ${btn("×","pdel-"+p.id,"danger",true)}
+        </div></td>
+      </tr>`).join("")}
+      ${fil.length===0?`<tr><td colspan="7" style="padding:22px;text-align:center;font-family:sans-serif;color:${C.gray};font-size:12px;">Nenhum processo encontrado.</td></tr>`:""}
+      </tbody></table>
+    </div>`;
+    document.getElementById("pbusca").oninput=e=>{busca=e.target.value.toLowerCase();draw();};
+    document.getElementById("pfarea").onchange=e=>{fArea=e.target.value;draw();};
+    document.getElementById("pfst").onchange=e=>{fSt=e.target.value;draw();};
+    document.getElementById("pnovo").onclick=()=>abrirFormProc(null,draw);
+    fil.forEach(p=>{
+      const ed=document.getElementById("pedit-"+p.id);
+      const dl=document.getElementById("pdel-"+p.id);
+      if(ed)ed.onclick=()=>abrirFormProc(p,draw);
+      if(dl)dl.onclick=()=>{if(confirm("Excluir?"))DB.processos=DB.processos.filter(x=>x.id!=p.id),saveDB(),draw();};
+    });
+  }
+  draw();
+}
+function abrirFormProc(p,cb){
+  const isNew=!p;
+  p=p||{id:"",cli:"",num:"",tip:"",area:"",status:"Em andamento",adv:"",valor:"",trib:"",desc:""};
+  const body=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      ${inp("Cliente *","fpcli","text",p.cli)}${inp("Número *","fpnum","text",p.num,"0000000-00.0000.0.00.0000")}
+      ${sel("Tipo","fptip",["Cível","Criminal","Trabalhista","Administrativo"],p.tip)}${sel("Área","fparea",AREAS,p.area)}
+      ${sel("Status","fpst",STATUS_PROC,p.status)}${sel("Advogado","fpadv",DB.advogados.map(a=>a.nome),p.adv)}
+      ${inp("Valor da Causa","fpval","text",p.valor,"R$ 0,00")}${inp("Tribunal","fptrib","text",p.trib,"TJRS, TRT...")}
+    </div>
+    <div style="margin-bottom:11px;"><label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;">Descrição</label>
+    <textarea id="fpdesc" rows="3" style="width:100%;padding:8px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;resize:vertical;box-sizing:border-box;">${p.desc||""}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">${btn("Cancelar","fpcancl","ghost")}${btn("Salvar","fpsave")}</div>`;
+  openModal(modal("fproc",isNew?"Novo Processo":"Editar Processo",body,640));
+  document.getElementById("fpcancl").onclick=()=>document.getElementById("fproc-overlay").remove();
+  document.getElementById("fpsave").onclick=()=>{
+    const cli=document.getElementById("fpcli").value;
+    const num=document.getElementById("fpnum").value;
+    if(!cli||!num)return alert("Cliente e número são obrigatórios.");
+    const obj={id:p.id||uid(),cli,num,tip:document.getElementById("fptip").value,area:document.getElementById("fparea").value,status:document.getElementById("fpst").value,adv:document.getElementById("fpadv").value,valor:document.getElementById("fpval").value,trib:document.getElementById("fptrib").value,desc:document.getElementById("fpdesc").value};
+    if(isNew)DB.processos.push(obj);
+    else DB.processos=DB.processos.map(x=>x.id==obj.id?obj:x);
+    saveDB();document.getElementById("fproc-overlay").remove();cb();
+  };
+}
+
+// ── PRAZOS ──
+function pgPrazos(el){
+  function draw(){
+    const pend=[...DB.prazos.filter(p=>!p.done)].sort((a,b)=>new Date(a.data)-new Date(b.data));
+    const conc=DB.prazos.filter(p=>p.done);
+    el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+      <h1 style="font-size:22px;color:${C.navy};">⏰ Prazos</h1>
+      <div style="display:flex;gap:7px;">${btn("🤖 Interpretar eproc","peproc","navy")}${btn("+ Novo","ppnovo")}</div>
+    </div>
+    <div style="font-size:13px;color:${C.navy};margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};font-weight:600;">Pendentes (${pend.length})</div>
+    ${pend.length===0?`<p style="font-family:sans-serif;font-size:12px;color:${C.gray};margin-bottom:14px;">Nenhum prazo pendente ✅</p>`:""}
+    ${pend.map(p=>{const d=dias(p.data),cor=d<=3?C.red:d<=7?C.orange:C.gold3;return`<div style="display:flex;align-items:center;gap:9px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid ${C.gray2};border-left:4px solid ${cor};margin-bottom:4px;">
+      <input type="checkbox" data-tid="${p.id}" style="accent-color:${C.green};width:15px;height:15px;cursor:pointer;flex-shrink:0;"/>
+      <div style="flex:1;"><div style="font-family:sans-serif;font-weight:700;font-size:13px;color:${C.navy};">${p.ev}</div><div style="font-family:sans-serif;font-size:10px;color:${C.gray};">${p.cli||"—"}${p.proc?` · ${p.proc}`:""} · ${fmtD(p.data)}</div></div>
+      <span style="background:${cor}22;color:${cor};border:1px solid ${cor}44;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;font-family:sans-serif;flex-shrink:0;">${d<0?"VENC":d===0?"HOJE":d+"d"}</span>
+      ${badge(p.prior)}
+      ${btn("×","pdl-"+p.id,"danger",true)}
+    </div>`;}).join("")}
+    ${conc.length>0?`<div style="font-size:13px;color:${C.gray};margin-top:18px;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">Concluídos (${conc.length})</div>
+    ${conc.map(p=>`<div style="display:flex;align-items:center;gap:9px;padding:8px 12px;background:#fff;border-radius:7px;border:1px solid ${C.gray2};margin-bottom:3px;opacity:.6;">
+      <input type="checkbox" checked data-tid="${p.id}" style="accent-color:${C.green};"/>
+      <span style="font-family:sans-serif;font-size:12px;text-decoration:line-through;color:${C.gray};flex:1;">${p.ev} — ${p.cli||"—"}</span>
+      ${btn("×","pdl-"+p.id,"danger",true)}
+    </div>`).join("")}`:""}`;
+    document.querySelectorAll("[data-tid]").forEach(cb=>{cb.onchange=()=>{DB.prazos=DB.prazos.map(p=>p.id==cb.dataset.tid?{...p,done:!p.done}:p);saveDB();draw();};});
+    document.querySelectorAll("[id^='pdl-']").forEach(b=>{b.onclick=()=>{const id=b.id.replace("pdl-","");if(confirm("Excluir?"))DB.prazos=DB.prazos.filter(p=>p.id!=id),saveDB(),draw();};});
+    document.getElementById("ppnovo").onclick=()=>abrirFormPrazo(draw);
+    document.getElementById("peproc").onclick=()=>abrirEproc(draw);
+  }
+  draw();
+}
+function abrirFormPrazo(cb){
+  const body=`
+    ${sel("Processo","fzproc",DB.processos.map(p=>p.num))}
+    ${inp("Cliente","fzcli")}${inp("Evento *","fzev","text","","Contestação, Audiência...")}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${inp("Data *","fzdata","date")}${sel("Prioridade","fzpri",["Alta","Média","Baixa"],"Média")}</div>
+    <div style="margin-bottom:11px;"><label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;">Obs</label><textarea id="fzobs" rows="2" style="width:100%;padding:7px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;resize:vertical;box-sizing:border-box;"></textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">${btn("Cancelar","fzcancl","ghost")}${btn("Salvar","fzsave")}</div>`;
+  openModal(modal("fprazo","Novo Prazo",body));
+  document.getElementById("fzproc").onchange=e=>{const p=DB.processos.find(x=>x.num===e.target.value);if(p)document.getElementById("fzcli").value=p.cli;};
+  document.getElementById("fzcancl").onclick=()=>document.getElementById("fprazo-overlay").remove();
+  document.getElementById("fzsave").onclick=()=>{
+    const ev=document.getElementById("fzev").value,data=document.getElementById("fzdata").value;
+    if(!ev||!data)return alert("Evento e data são obrigatórios.");
+    DB.prazos.push({id:uid(),proc:document.getElementById("fzproc").value,cli:document.getElementById("fzcli").value,ev,data,prior:document.getElementById("fzpri").value,obs:document.getElementById("fzobs").value,done:false});
+    saveDB();document.getElementById("fprazo-overlay").remove();cb();
+  };
+}
+function abrirEproc(cb){
+  const body=`<p style="font-family:sans-serif;font-size:12px;color:${C.gray};margin-bottom:11px;line-height:1.6;">Cole o texto do andamento processual. A IA identifica o prazo e calcula a data limite.</p>
+    <div style="margin-bottom:11px;"><textarea id="eptxt" rows="5" placeholder="Intimação para contestar no prazo de 15 dias..." style="width:100%;padding:8px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;resize:vertical;box-sizing:border-box;"></textarea></div>
+    ${btn("Interpretar com IA","epinterp")}
+    <div id="epres" style="display:none;background:${C.cream};border-radius:7px;padding:12px;margin-top:12px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:11px;">${btn("Cancelar","epcancl","ghost")}</div>`;
+  openModal(modal("feproc","🤖 Interpretar eproc / esaj",body,580));
+  document.getElementById("epcancl").onclick=()=>document.getElementById("feproc-overlay").remove();
+  document.getElementById("epinterp").onclick=async()=>{
+    const txt=document.getElementById("eptxt").value;if(!txt.trim())return;
+    document.getElementById("epinterp").textContent="Interpretando...";
+    try{
+      const r=await apiIA("Analise o texto processual e retorne apenas JSON: {\"evento\":\"...\",\"prazo_dias\":N,\"data_limite\":\"YYYY-MM-DD\",\"prioridade\":\"Alta|Média|Baixa\",\"observacoes\":\"...\"}",
+        [{role:"user",content:txt}]);
+      const j=JSON.parse(r.replace(/```[a-z]*|```/g,"").trim());
+      const epres=document.getElementById("epres");
+      epres.style.display="block";
+      epres.innerHTML=Object.entries(j).filter(([,v])=>v).map(([k,v])=>`<div style="margin-bottom:5px;"><span style="font-family:sans-serif;font-size:9px;font-weight:700;color:${C.gray};text-transform:uppercase;">${k.replace(/_/g," ")}: </span><span style="font-family:sans-serif;font-size:12px;">${v}</span></div>`).join("")+
+        `<div style="margin-top:10px;">${btn("Usar estes dados","epusar")}</div>`;
+      document.getElementById("epusar").onclick=()=>{document.getElementById("feproc-overlay").remove();abrirFormPrazoPreenchido(j,cb);};
+    }catch(e){alert("Erro: "+e.message);}
+    document.getElementById("epinterp").textContent="Interpretar com IA";
+  };
+}
+function abrirFormPrazoPreenchido(j,cb){
+  const body=`
+    ${inp("Evento *","fzev2","text",j.evento||"")}
+    ${inp("Cliente","fzcli2")}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${inp("Data *","fzdata2","date",j.data_limite||"")}${sel("Prioridade","fzpri2",["Alta","Média","Baixa"],j.prioridade||"Média")}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">${btn("Cancelar","fz2cancl","ghost")}${btn("Salvar","fz2save")}</div>`;
+  openModal(modal("fprazo2","Novo Prazo (eproc)",body));
+  document.getElementById("fz2cancl").onclick=()=>document.getElementById("fprazo2-overlay").remove();
+  document.getElementById("fz2save").onclick=()=>{
+    const ev=document.getElementById("fzev2").value,data=document.getElementById("fzdata2").value;
+    if(!ev||!data)return alert("Evento e data são obrigatórios.");
+    DB.prazos.push({id:uid(),proc:"",cli:document.getElementById("fzcli2").value,ev,data,prior:document.getElementById("fzpri2").value,obs:j.observacoes||"",done:false});
+    saveDB();document.getElementById("fprazo2-overlay").remove();cb();
+  };
+}
+
+// ── FINANCEIRO ──
+function pgFinanceiro(el){
+  let fTipo="",fMes="";
+  function draw(){
+    const fil=DB.financeiro.filter(f=>(!fTipo||f.tipo===fTipo)&&(!fMes||f.data?.split("-")[1]===fMes.padStart(2,"0"))).sort((a,b)=>new Date(b.data)-new Date(a.data));
+    const ent=DB.financeiro.filter(f=>f.valor>0).reduce((a,f)=>a+f.valor,0);
+    const sai=DB.financeiro.filter(f=>f.valor<0).reduce((a,f)=>a+Math.abs(f.valor),0);
+    el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div><h1 style="font-size:22px;color:${C.navy};">💰 Financeiro</h1><p style="font-family:sans-serif;font-size:10px;color:${C.gray};margin-top:2px;">Honorários, dativos, despesas e aportes</p></div>
+      ${btn("+ Lançamento","ffnovo")}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:16px;">
+      ${[{l:"Entradas",v:fmtR(ent),i:"💵",c:C.green},{l:"Saídas",v:fmtR(sai),i:"📤",c:C.red},{l:"Saldo",v:fmtR(ent-sai),i:"💼",c:(ent-sai)>=0?C.navy:C.red}].map(x=>`<div style="background:#fff;border-radius:9px;border:1px solid ${C.gray2};padding:12px 14px;display:flex;align-items:center;gap:9px;"><div style="width:32px;height:32px;border-radius:7px;background:${x.c}18;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">${x.i}</div><div><div style="font-family:sans-serif;font-size:15px;font-weight:800;color:${x.c};">${x.v}</div><div style="font-family:sans-serif;font-size:9px;color:${C.gray};">${x.l}</div></div></div>`).join("")}
+    </div>
+    <div style="background:#fff;border-radius:11px;box-shadow:0 2px 10px rgba(11,31,58,.05);border:1px solid ${C.gray2};">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid ${C.gray2};">
+        <div style="font-size:13px;color:${C.navy};font-weight:600;">Lançamentos</div>
+        <div style="display:flex;gap:6px;">
+          <select id="fftipo" style="padding:5px 9px;border:1.5px solid ${C.gray2};border-radius:6px;font-family:sans-serif;font-size:11px;outline:none;"><option value="">Todos os tipos</option>${TIPOS_FIN.map(t=>`<option${fTipo===t?" selected":""}>${t}</option>`).join("")}</select>
+          <select id="ffmes" style="padding:5px 9px;border:1.5px solid ${C.gray2};border-radius:6px;font-family:sans-serif;font-size:11px;outline:none;"><option value="">Todos os meses</option>${["01","02","03","04","05","06","07","08","09","10","11","12"].map((m,i)=>`<option value="${m}"${fMes===m?" selected":""}>${["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][i]}</option>`).join("")}</select>
+        </div>
+      </div>
+      <table><thead><tr style="background:${C.navy};">${["Data","Tipo","Descrição","Cliente","NF","Valor",""].map(h=>`<th style="padding:8px 12px;color:${C.gold};font-size:9px;font-weight:700;text-align:left;text-transform:uppercase;">${h}</th>`).join("")}</tr></thead>
+      <tbody>${fil.map((f,i)=>`<tr style="border-bottom:1px solid ${C.gray2};background:${i%2===0?"#fff":"#fafbfd"};">
+        <td style="padding:8px 12px;font-size:11px;">${fmtD(f.data)}</td><td style="padding:8px 12px;">${badge(f.tipo)}</td>
+        <td style="padding:8px 12px;font-size:11px;">${f.desc||"—"}</td><td style="padding:8px 12px;font-size:11px;color:${C.gray};">${f.cli||"—"}</td>
+        <td style="padding:8px 12px;font-size:10px;color:${C.blue};">${f.nf||"—"}</td>
+        <td style="padding:8px 12px;font-weight:700;color:${f.valor<0?C.red:C.green};font-size:12px;">${fmtR(Math.abs(f.valor))}</td>
+        <td style="padding:8px 12px;">${btn("×","ffdel-"+f.id,"danger",true)}</td>
+      </tr>`).join("")}
+      ${fil.length===0?`<tr><td colspan="7" style="padding:20px;text-align:center;font-family:sans-serif;color:${C.gray};font-size:12px;">Nenhum lançamento.</td></tr>`:""}
+      </tbody></table>
+    </div>`;
+    document.getElementById("fftipo").onchange=e=>{fTipo=e.target.value;draw();};
+    document.getElementById("ffmes").onchange=e=>{fMes=e.target.value;draw();};
+    document.getElementById("ffnovo").onclick=()=>abrirFormFin(draw);
+    document.querySelectorAll("[id^='ffdel-']").forEach(b=>{b.onclick=()=>{const id=b.id.replace("ffdel-","");if(confirm("Excluir?"))DB.financeiro=DB.financeiro.filter(f=>f.id!=id),saveDB(),draw();};});
+  }
+  draw();
+}
+function abrirFormFin(cb){
+  const body=`
+    <div style="margin-bottom:11px;">
+      <label style="display:block;font-size:10px;font-weight:700;color:#0B1F3A;margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;letter-spacing:.8px;">Tipo de Lançamento *</label>
+      <select id="fftipo2" style="width:100%;padding:8px 10px;border:1.5px solid #E8EDF4;border-radius:7px;font-size:13px;font-family:sans-serif;color:#1C2B3A;outline:none;background:#fff;box-sizing:border-box;">
+        <option value="">— Selecione —</option>
+        <optgroup label="💚 Entradas">
+          <option value="Honorários">Honorários</option>
+          <option value="Aporte">Aporte</option>
+          <option value="Pagamento Dativo">Pagamento Dativo</option>
+          <option value="Nota Fiscal">Nota Fiscal</option>
+          <option value="Outros">Outros</option>
+        </optgroup>
+        <optgroup label="🔴 Saídas">
+          <option value="Despesa">Despesa</option>
+        </optgroup>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      ${inp("Data *","ffdata","date")}
+      ${inp("Valor R$ *","ffval","number","","0.00")}
+      ${inp("Nº Nota Fiscal","ffnf","text","","Opcional")}
+      ${inp("Cliente / Referência","ffcli")}
+    </div>
+    ${inp("Descrição","ffdesc","text","","Ex: Honorários — João Silva")}
+    <div style="margin-bottom:11px;"><label style="display:block;font-size:10px;font-weight:700;color:#0B1F3A;margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;">Observação</label><textarea id="ffobs" rows="2" style="width:100%;padding:7px 10px;border:1.5px solid #E8EDF4;border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;resize:vertical;box-sizing:border-box;"></textarea></div>
+    <div id="fftipo-info" style="display:none;padding:8px 11px;border-radius:7px;font-family:sans-serif;font-size:12px;margin-bottom:11px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">${btn("Cancelar","ffcancl","ghost")}${btn("Salvar","ffsave")}</div>`;
+  openModal(modal("fform","Novo Lançamento",body,560));
+  document.getElementById("ffcancl").onclick=()=>document.getElementById("fform-overlay").remove();
+  document.getElementById("fftipo2").onchange=e=>{
+    const tipo=e.target.value;
+    const info=document.getElementById("fftipo-info");
+    const msgs={
+      "Honorários":"💚 Entrada — será registrada como receita do escritório.",
+      "Aporte":"💚 Entrada — aporte de capital dos sócios.",
+      "Pagamento Dativo":"💚 Entrada — honorários pagos pelo Estado.",
+      "Nota Fiscal":"💚 Entrada — receita com nota fiscal emitida.",
+      "Outros":"💚 Entrada — outras receitas.",
+      "Despesa":"🔴 Saída — será registrada como despesa do escritório."
+    };
+    if(msgs[tipo]){
+      info.style.display="block";
+      info.style.background=tipo==="Despesa"?"rgba(192,57,43,.08)":"rgba(26,122,74,.08)";
+      info.style.color=tipo==="Despesa"?"#C0392B":"#1A7A4A";
+      info.style.border="1px solid "+(tipo==="Despesa"?"rgba(192,57,43,.2)":"rgba(26,122,74,.2)");
+      info.textContent=msgs[tipo];
+    } else {
+      info.style.display="none";
+    }
+  };
+  document.getElementById("ffsave").onclick=()=>{
+    const vl=parseFloat(document.getElementById("ffval").value);
+    const tipo=document.getElementById("fftipo2").value;
+    if(!document.getElementById("ffdata").value||!tipo||isNaN(vl)||vl<=0)return alert("Data, tipo e valor são obrigatórios.");
+    const neg=tipo==="Despesa";
+    DB.financeiro.push({
+      id:uid(),
+      data:document.getElementById("ffdata").value,
+      tipo,
+      valor:neg?-Math.abs(vl):Math.abs(vl),
+      nf:document.getElementById("ffnf").value,
+      desc:document.getElementById("ffdesc").value,
+      cli:document.getElementById("ffcli").value,
+      obs:document.getElementById("ffobs").value
+    });
+    saveDB();document.getElementById("fform-overlay").remove();cb();
+  };
+}
+
+// ── JURISPRUDÊNCIAS ──
+function pgJuris(el){
+  let busca="",fArea="";
+  function draw(){
+    const fil=DB.juris.filter(j=>(!busca||(j.tit.toLowerCase().includes(busca)||j.em.toLowerCase().includes(busca)||(j.tags||[]).some(t=>t.toLowerCase().includes(busca))))&&(!fArea||j.area===fArea));
+    el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><h1 style="font-size:22px;color:${C.navy};">📖 Jurisprudências</h1>${btn("+ Adicionar","jnova")}</div>
+    <div style="display:flex;gap:7px;margin-bottom:14px;">
+      <input id="jbusca" value="${busca}" placeholder="Buscar título, ementa ou tag..." style="flex:1;padding:7px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-family:sans-serif;font-size:12px;outline:none;"/>
+      <select id="jfarea" style="padding:7px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-family:sans-serif;font-size:12px;outline:none;"><option value="">Todas as áreas</option>${AREAS.map(a=>`<option${fArea===a?" selected":""}>${a}</option>`).join("")}</select>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:13px;">
+      ${fil.map(j=>`<div style="background:#fff;border-radius:11px;box-shadow:0 2px 10px rgba(11,31,58,.05);border:1px solid ${C.gray2};padding:18px;display:flex;flex-direction:column;gap:7px;">
+        <div style="display:flex;justify-content:space-between;">${badge(j.area||"Geral")}<div style="display:flex;gap:4px;">${btn("×","jdel-"+j.id,"danger",true)}</div></div>
+        <div style="font-weight:700;font-size:13px;color:${C.navy};line-height:1.4;">${j.tit}</div>
+        <div style="font-family:sans-serif;font-size:10px;color:${C.gold3};font-weight:700;">${j.trib}${j.num?` · ${j.num}`:""}</div>
+        <div style="font-family:sans-serif;font-size:11px;color:${C.gray};line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${j.em}</div>
+        ${j.tags?.length>0?`<div style="display:flex;gap:4px;flex-wrap:wrap;">${j.tags.map(t=>`<span style="background:${C.navy}10;color:${C.navy};border-radius:3px;padding:1px 5px;font-size:9px;font-family:sans-serif;">#${t}</span>`).join("")}</div>`:""}
+      </div>`).join("")}
+      ${fil.length===0?`<p style="font-family:sans-serif;color:${C.gray};font-size:12px;">Nenhuma jurisprudência encontrada.</p>`:""}
+    </div>`;
+    document.getElementById("jbusca").oninput=e=>{busca=e.target.value.toLowerCase();draw();};
+    document.getElementById("jfarea").onchange=e=>{fArea=e.target.value;draw();};
+    document.getElementById("jnova").onclick=()=>abrirFormJuris(draw);
+    document.querySelectorAll("[id^='jdel-']").forEach(b=>{b.onclick=()=>{const id=b.id.replace("jdel-","");if(confirm("Excluir?"))DB.juris=DB.juris.filter(x=>x.id!=id),saveDB(),draw();};});
+  }
+  draw();
+}
+function abrirFormJuris(cb){
+  const body=`${inp("Título *","jttit")}<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">${inp("Tribunal","jttrib","text","","STJ, STF...")}${inp("Número","jtnum","text","","REsp...")}${inp("Data","jtdata","date")}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${sel("Área","jtarea",AREAS)}${inp("Tags (vírgula)","jttags","text","","dano moral, família...")}</div><div style="margin-bottom:11px;"><label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;">Ementa *</label><textarea id="jtem" rows="5" style="width:100%;padding:8px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;resize:vertical;box-sizing:border-box;"></textarea></div><div style="display:flex;gap:8px;justify-content:flex-end;">${btn("Cancelar","jtcancl","ghost")}${btn("Salvar","jtsave")}</div>`;
+  openModal(modal("fjuris","Adicionar Jurisprudência",body,620));
+  document.getElementById("jtcancl").onclick=()=>document.getElementById("fjuris-overlay").remove();
+  document.getElementById("jtsave").onclick=()=>{
+    const tit=document.getElementById("jttit").value,em=document.getElementById("jtem").value;
+    if(!tit||!em)return alert("Título e ementa são obrigatórios.");
+    DB.juris.push({id:uid(),tit,trib:document.getElementById("jttrib").value,num:document.getElementById("jtnum").value,data:document.getElementById("jtdata").value,area:document.getElementById("jtarea").value,em,tags:document.getElementById("jttags").value.split(",").map(t=>t.trim()).filter(Boolean)});
+    saveDB();document.getElementById("fjuris-overlay").remove();cb();
+  };
+}
+
+// ── ADVOGADOS ──
+function pgAdvogados(el){
+  function draw(){
+    el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;"><h1 style="font-size:22px;color:${C.navy};">⚖️ Advogados</h1>${btn("+ Cadastrar","anvovo")}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:13px;">
+      ${DB.advogados.map(a=>`<div style="background:#fff;border-radius:11px;box-shadow:0 2px 10px rgba(11,31,58,.05);border:1px solid ${C.gray2};padding:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:9px;">
+          ${a.foto?`<img src="${a.foto}" style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid rgba(201,168,76,.4);"/>`:`<div style="width:60px;height:60px;border-radius:50%;background:${C.navy};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:${C.gold};">${a.nome.charAt(0)}</div>`}
+          <div style="display:flex;gap:4px;">${btn("✏️","aedit-"+a.id,"ghost",true)}${btn("×","adel-"+a.id,"danger",true)}</div>
+        </div>
+        <div style="font-weight:700;font-size:14px;color:${C.navy};">${a.nome}</div>
+        <div style="font-family:sans-serif;font-size:10px;color:${C.gold3};font-weight:700;margin-bottom:5px;">OAB ${a.oab}</div>
+        ${a.email?`<div style="font-family:sans-serif;font-size:11px;color:${C.gray};">✉ ${a.email}</div>`:""}
+        ${a.tel?`<div style="font-family:sans-serif;font-size:11px;color:${C.gray};">📱 ${a.tel}</div>`:""}
+        ${a.login?`<div style="font-family:sans-serif;font-size:9px;color:${C.gray};margin-top:4px;">Login: <strong>${a.login}</strong></div>`:""}
+      </div>`).join("")}
+    </div>`;
+    document.getElementById("anvovo").onclick=()=>abrirFormAdv(null,draw);
+    document.querySelectorAll("[id^='aedit-']").forEach(b=>{b.onclick=()=>{const a=DB.advogados.find(x=>x.id==b.id.replace("aedit-",""));if(a)abrirFormAdv(a,draw);};});
+    document.querySelectorAll("[id^='adel-']").forEach(b=>{b.onclick=()=>{const id=b.id.replace("adel-","");if(confirm("Excluir?"))DB.advogados=DB.advogados.filter(x=>x.id!=id),saveDB(),draw();};});
+  }
+  draw();
+}
+function abrirFormAdv(a,cb){
+  const isNew=!a; a=a||{id:"",nome:"",oab:"",email:"",tel:"",esp:"",login:"",senha:"1234",foto:""};
+  const body=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${inp("Nome *","anom","text",a.nome)}${inp("OAB *","aoab","text",a.oab,"RS 123.456")}${inp("Telefone","atel","text",a.tel)}${inp("E-mail","aeml","email",a.email)}</div>${inp("Especialidade(s)","aesp","text",a.esp,"Civil, Família...")}<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${inp("Login *","alog","text",a.login)}${inp("Senha *","asen","password",a.senha)}</div><div style="display:flex;gap:8px;justify-content:flex-end;">${btn("Cancelar","acancl","ghost")}${btn("Salvar","asave")}</div>`;
+  openModal(modal("fadv",isNew?"Cadastrar Advogado":"Editar Advogado",body));
+  document.getElementById("acancl").onclick=()=>document.getElementById("fadv-overlay").remove();
+  document.getElementById("asave").onclick=()=>{
+    const nome=document.getElementById("anom").value,oab=document.getElementById("aoab").value,login=document.getElementById("alog").value,senha=document.getElementById("asen").value;
+    if(!nome||!oab||!login||!senha)return alert("Nome, OAB, login e senha são obrigatórios.");
+    const obj={id:a.id||uid(),nome,oab,email:document.getElementById("aeml").value,tel:document.getElementById("atel").value,esp:document.getElementById("aesp").value,login,senha,foto:a.foto||""};
+    if(isNew)DB.advogados.push(obj); else DB.advogados=DB.advogados.map(x=>x.id==obj.id?obj:x);
+    saveDB();document.getElementById("fadv-overlay").remove();cb();
+  };
+}
+
+// ── ESTAGIÁRIOS ──
+function pgEstagiarios(el){
+  function draw(){
+    el.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;"><h1 style="font-size:22px;color:${C.navy};">📚 Estagiários</h1>${btn("+ Cadastrar","esnovo")}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:13px;">
+      ${DB.estagiarios.map(e=>`<div style="background:#fff;border-radius:11px;box-shadow:0 2px 10px rgba(11,31,58,.05);border:1px solid ${C.gray2};padding:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:9px;">
+          ${e.foto?`<img src="${e.foto}" style="width:60px;height:60px;border-radius:50%;object-fit:cover;"/>`:`<div style="width:60px;height:60px;border-radius:50%;background:rgba(41,128,185,.15);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:${C.blue};">${e.nome.charAt(0)}</div>`}
+          <div style="display:flex;gap:4px;">${btn("✏️","esedit-"+e.id,"ghost",true)}${btn("×","esdel-"+e.id,"danger",true)}</div>
+        </div>
+        <div style="font-weight:700;font-size:13px;color:${C.navy};">${e.nome}</div>
+        ${e.fac?`<div style="font-family:sans-serif;font-size:11px;color:${C.gray};">${e.fac}${e.sem?` — ${e.sem} sem.`:""}</div>`:""}
+        ${e.sup?`<div style="font-family:sans-serif;font-size:10px;margin-top:4px;">Supervisor: ${e.sup}</div>`:""}
+        ${e.login?`<div style="font-family:sans-serif;font-size:9px;color:${C.gray};margin-top:3px;">Login: <strong>${e.login}</strong></div>`:""}
+      </div>`).join("")}
+    </div>`;
+    document.getElementById("esnovo").onclick=()=>abrirFormEst(null,draw);
+    document.querySelectorAll("[id^='esedit-']").forEach(b=>{b.onclick=()=>{const e=DB.estagiarios.find(x=>x.id==b.id.replace("esedit-",""));if(e)abrirFormEst(e,draw);};});
+    document.querySelectorAll("[id^='esdel-']").forEach(b=>{b.onclick=()=>{const id=b.id.replace("esdel-","");if(confirm("Excluir?"))DB.estagiarios=DB.estagiarios.filter(x=>x.id!=id),saveDB(),draw();};});
+  }
+  draw();
+}
+function abrirFormEst(e,cb){
+  const isNew=!e; e=e||{id:"",nome:"",fac:"",sem:"",email:"",sup:"",login:"",senha:"1234",foto:""};
+  const body=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${inp("Nome *","esnom","text",e.nome)}${inp("Faculdade","esfac","text",e.fac)}${inp("Semestre","essem","text",e.sem)}${inp("E-mail","eseml","email",e.email)}</div>${sel("Supervisor","essup",DB.advogados.map(a=>a.nome),e.sup)}<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${inp("Login *","eslog","text",e.login)}${inp("Senha *","essen","password",e.senha)}</div><div style="display:flex;gap:8px;justify-content:flex-end;">${btn("Cancelar","escancl","ghost")}${btn("Salvar","essave")}</div>`;
+  openModal(modal("fest2",isNew?"Cadastrar Estagiário":"Editar Estagiário",body));
+  document.getElementById("escancl").onclick=()=>document.getElementById("fest2-overlay").remove();
+  document.getElementById("essave").onclick=()=>{
+    const nome=document.getElementById("esnom").value,login=document.getElementById("eslog").value,senha=document.getElementById("essen").value;
+    if(!nome||!login||!senha)return alert("Nome, login e senha são obrigatórios.");
+    const obj={id:e.id||uid(),nome,fac:document.getElementById("esfac").value,sem:document.getElementById("essem").value,email:document.getElementById("eseml").value,sup:document.getElementById("essup").value,login,senha,foto:e.foto||""};
+    if(isNew)DB.estagiarios.push(obj); else DB.estagiarios=DB.estagiarios.map(x=>x.id==obj.id?obj:x);
+    saveDB();document.getElementById("fest2-overlay").remove();cb();
+  };
+}
+
+// ── DEGRAVAÇÃO ──
+let srRef=null;
+function pgDegravacao(el){
+  let aba="txt",vivoTxt="",vivoOut="",txtOut="",uploadOut="";
+  const srRef={current:null};
+  const fmtP=fmt=>({ata:"ata jurídica formal",depoimento:"termo de depoimento",reuniao:"ata de reunião",audiencia:"ata de audiência",livre:"texto organizado"}[fmt]||"texto organizado");
+
+  function draw(){
+    el.innerHTML=`
+    <div style="margin-bottom:14px;"><h1 style="font-size:22px;color:#0B1F3A;">🎙️ Degravação com IA</h1><p style="font-family:sans-serif;font-size:10px;color:#8A9BB0;margin-top:2px;">Cole texto, faça upload ou grave ao vivo</p></div>
+    <div style="display:flex;gap:3px;background:#E8EDF4;border-radius:7px;padding:3px;width:fit-content;margin-bottom:14px;">
+      ${[{id:"txt",l:"📝 Colar Texto"},{id:"upload",l:"📁 Upload Arquivo"},{id:"vivo",l:"🎤 Ao Vivo"}].map(t=>`<button data-daba="${t.id}" style="font-family:sans-serif;font-weight:600;font-size:11px;padding:5px 12px;border-radius:5px;border:none;cursor:pointer;background:${aba===t.id?"#fff":"transparent"};color:${aba===t.id?"#0B1F3A":"#8A9BB0"};">${t.l}</button>`).join("")}
+    </div>
+
+    ${aba==="txt"?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div style="background:#fff;border-radius:11px;border:1px solid #E8EDF4;padding:20px;">
+        <div style="font-size:13px;color:#0B1F3A;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid #E8EDF4;font-weight:600;">📝 Colar Transcrição</div>
+        <div style="background:rgba(201,168,76,.07);border-radius:6px;padding:7px 9px;font-family:sans-serif;font-size:11px;color:#a8872e;margin-bottom:9px;line-height:1.5;">💡 Para vídeos grandes: use YouTube/Meet/Zoom e cole a transcrição aqui.</div>
+        <textarea id="dtxtin" rows="9" placeholder="Cole a transcrição bruta aqui..." style="width:100%;padding:7px 9px;border:1.5px solid #E8EDF4;border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;resize:vertical;box-sizing:border-box;margin-bottom:9px;"></textarea>
+        <div style="margin-bottom:11px;"><label style="display:block;font-size:10px;font-weight:700;color:#0B1F3A;margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;">Formato</label><select id="dtxtfmt" style="width:100%;padding:8px 10px;border:1.5px solid #E8EDF4;border-radius:7px;font-size:13px;font-family:sans-serif;outline:none;background:#fff;box-sizing:border-box;"><option value="ata">ata</option><option value="depoimento">depoimento</option><option value="reuniao">reuniao</option><option value="audiencia">audiencia</option><option value="livre">livre</option></select></div>
+        <div style="display:flex;gap:7px;"><button id="dtxtorg" style="flex:1;font-family:sans-serif;font-weight:700;border-radius:7px;border:none;cursor:pointer;padding:8px 15px;font-size:13px;background:#C9A84C;color:#0B1F3A;">🤖 Organizar com IA</button><button id="dtxtclr" style="font-family:sans-serif;font-weight:700;border-radius:7px;border:none;cursor:pointer;padding:8px 15px;font-size:13px;background:transparent;color:#0B1F3A;border:1.5px solid #E8EDF4;">Limpar</button></div>
+      </div>
+      <div style="background:#fff;border-radius:11px;border:1px solid #E8EDF4;padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid #E8EDF4;"><div style="font-size:13px;color:#0B1F3A;font-weight:600;">Resultado</div><div style="display:flex;gap:4px;"><button id="dtxtcopy" style="padding:4px 8px;border:1.5px solid #E8EDF4;border-radius:6px;background:transparent;cursor:pointer;font-size:11px;">📋</button><button id="dtxtsave" style="padding:4px 8px;border:1.5px solid #E8EDF4;border-radius:6px;background:transparent;cursor:pointer;font-size:11px;">💾</button></div></div>
+        <div id="dtxtout" style="font-family:sans-serif;font-size:12px;line-height:1.8;min-height:200px;white-space:pre-wrap;max-height:320px;overflow-y:auto;color:${txtOut?"#1C2B3A":"#8A9BB0"};">${txtOut||"O resultado aparecerá aqui."}</div>
+      </div>
+    </div>`:""}
+
+    ${aba==="upload"?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div style="background:#fff;border-radius:11px;border:1px solid #E8EDF4;padding:20px;">
+        <div style="font-size:13px;color:#0B1F3A;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid #E8EDF4;font-weight:600;">📁 Upload de Arquivo</div>
+        <div style="background:rgba(201,168,76,.07);border-radius:6px;padding:7px 9px;font-family:sans-serif;font-size:11px;color:#a8872e;margin-bottom:9px;line-height:1.5;">💡 Selecione um arquivo de áudio ou vídeo. A IA irá transcrever e organizar o conteúdo. Máximo 10MB.</div>
+        <div id="uploadarea" onclick="document.getElementById('uploadfile').click()" style="border:2px dashed #E8EDF4;border-radius:9px;padding:24px;text-align:center;cursor:pointer;margin-bottom:9px;background:#F5F0E8;transition:.2s;">
+          <div style="font-size:28px;margin-bottom:6px;">📂</div>
+          <div id="uploadname" style="font-family:sans-serif;font-size:12px;color:#8A9BB0;">Clique para selecionar arquivo</div>
+          <div style="font-family:sans-serif;font-size:10px;color:#8A9BB0;margin-top:3px;">MP3, MP4, WAV, M4A, OGG</div>
+        </div>
+        <input type="file" id="uploadfile" accept="audio/*,video/*" style="display:none;"/>
+        <div style="margin-bottom:11px;"><label style="display:block;font-size:10px;font-weight:700;color:#0B1F3A;margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;">Formato</label><select id="uploadfmt" style="width:100%;padding:8px 10px;border:1.5px solid #E8EDF4;border-radius:7px;font-size:13px;font-family:sans-serif;outline:none;background:#fff;box-sizing:border-box;"><option value="ata">Ata jurídica</option><option value="depoimento">Depoimento</option><option value="reuniao">Ata de reunião</option><option value="audiencia">Audiência</option><option value="livre">Livre</option></select></div>
+        <button id="uploadorg" style="width:100%;font-family:sans-serif;font-weight:700;border-radius:7px;border:none;cursor:pointer;padding:8px 15px;font-size:13px;background:#C9A84C;color:#0B1F3A;">🤖 Transcrever com IA</button>
+      </div>
+      <div style="background:#fff;border-radius:11px;border:1px solid #E8EDF4;padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid #E8EDF4;"><div style="font-size:13px;color:#0B1F3A;font-weight:600;">Resultado</div><div style="display:flex;gap:4px;"><button id="uploadcopy" style="padding:4px 8px;border:1.5px solid #E8EDF4;border-radius:6px;background:transparent;cursor:pointer;font-size:11px;">📋</button><button id="uploadsave" style="padding:4px 8px;border:1.5px solid #E8EDF4;border-radius:6px;background:transparent;cursor:pointer;font-size:11px;">💾</button></div></div>
+        <div id="uploadout" style="font-family:sans-serif;font-size:12px;line-height:1.8;min-height:200px;white-space:pre-wrap;max-height:320px;overflow-y:auto;color:${uploadOut?"#1C2B3A":"#8A9BB0"};">${uploadOut||"O resultado aparecerá aqui."}</div>
+      </div>
+    </div>`:""}
+
+    ${aba==="vivo"?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div style="background:#fff;border-radius:11px;border:1px solid #E8EDF4;padding:20px;">
+        <div style="font-size:13px;color:#0B1F3A;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid #E8EDF4;font-weight:600;">🎤 Gravação ao Vivo</div>
+        <p style="font-family:sans-serif;font-size:12px;color:#8A9BB0;margin-bottom:12px;line-height:1.6;">Usa o microfone com transcrição automática do navegador. Requer Chrome ou Edge.</p>
+        <div style="text-align:center;padding:14px;background:#F5F0E8;border-radius:8px;margin-bottom:10px;"><div id="dvivo-icon" style="font-size:32px;margin-bottom:4px;">🎙️</div><div id="dvivo-st" style="font-family:sans-serif;font-weight:700;color:#0B1F3A;font-size:12px;">Pronto</div></div>
+        <div id="dvivo-txt" style="min-height:55px;padding:7px;background:#E8EDF4;border-radius:6px;font-family:sans-serif;font-size:11px;color:#1C2B3A;margin-bottom:9px;line-height:1.6;max-height:80px;overflow-y:auto;">${vivoTxt||"Transcrição aparecerá aqui..."}</div>
+        <div style="display:flex;gap:7px;margin-bottom:9px;"><button id="dvstart" style="flex:1;font-family:sans-serif;font-weight:700;border-radius:7px;border:none;cursor:pointer;padding:8px 15px;font-size:13px;background:#C9A84C;color:#0B1F3A;">▶ Iniciar</button><button id="dvstop" style="flex:1;font-family:sans-serif;font-weight:700;border-radius:7px;border:none;cursor:pointer;padding:8px 15px;font-size:13px;background:rgba(192,57,43,.1);color:#C0392B;border:1px solid rgba(192,57,43,.2);">⏹ Parar</button></div>
+        <div style="margin-bottom:11px;"><label style="display:block;font-size:10px;font-weight:700;color:#0B1F3A;margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;">Formato</label><select id="dvfmt" style="width:100%;padding:8px 10px;border:1.5px solid #E8EDF4;border-radius:7px;font-size:13px;font-family:sans-serif;outline:none;background:#fff;box-sizing:border-box;"><option value="ata">Ata jurídica</option><option value="depoimento">Depoimento</option><option value="reuniao">Ata de reunião</option><option value="audiencia">Audiência</option><option value="livre">Livre</option></select></div>
+        <button id="dvorg" style="width:100%;font-family:sans-serif;font-weight:700;border-radius:7px;border:none;cursor:pointer;padding:8px 15px;font-size:13px;background:#0B1F3A;color:#fff;">🤖 Organizar com IA</button>
+      </div>
+      <div style="background:#fff;border-radius:11px;border:1px solid #E8EDF4;padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid #E8EDF4;"><div style="font-size:13px;color:#0B1F3A;font-weight:600;">Resultado</div><div style="display:flex;gap:4px;"><button id="dvcopy" style="padding:4px 8px;border:1.5px solid #E8EDF4;border-radius:6px;background:transparent;cursor:pointer;font-size:11px;">📋</button><button id="dvsave" style="padding:4px 8px;border:1.5px solid #E8EDF4;border-radius:6px;background:transparent;cursor:pointer;font-size:11px;">💾</button></div></div>
+        <div id="dvout" style="font-family:sans-serif;font-size:12px;line-height:1.8;min-height:200px;white-space:pre-wrap;max-height:320px;overflow-y:auto;color:${vivoOut?"#1C2B3A":"#8A9BB0"};">${vivoOut||"O resultado aparecerá aqui."}</div>
+      </div>
+    </div>`:""}
+
+    ${DB.degravacoes.length>0?`<div style="margin-top:22px;"><div style="font-size:13px;color:#0B1F3A;margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid #E8EDF4;font-weight:600;">📁 Degravações Salvas</div>
+      ${[...DB.degravacoes].reverse().slice(0,6).map(d=>`<div style="display:flex;align-items:center;gap:9px;padding:8px 11px;background:#fff;border-radius:7px;border:1px solid #E8EDF4;margin-bottom:4px;">
+        <span>📝</span><div style="flex:1;"><div style="font-family:sans-serif;font-weight:600;font-size:12px;">${d.tipo} — ${d.data}</div><div style="font-family:sans-serif;font-size:10px;color:#8A9BB0;">${d.texto.substring(0,55)}...</div></div>
+        <button id="ddel-${d.id}" style="font-family:sans-serif;font-weight:700;border-radius:7px;border:none;cursor:pointer;padding:5px 10px;font-size:11px;background:rgba(192,57,43,.1);color:#C0392B;border:1px solid rgba(192,57,43,.2);">×</button>
+      </div>`).join("")}
+    </div>`:""}`;
+
+    document.querySelectorAll("[data-daba]").forEach(b=>{b.onclick=()=>{aba=b.dataset.daba;draw();};});
+    document.querySelectorAll("[id^='ddel-']").forEach(b=>{b.onclick=()=>{const id=b.id.replace("ddel-","");if(confirm("Excluir?"))DB.degravacoes=DB.degravacoes.filter(d=>d.id!=id),saveDB(),draw();};});
+
+    if(aba==="txt"){
+      document.getElementById("dtxtclr").onclick=()=>{document.getElementById("dtxtin").value="";};
+      document.getElementById("dtxtcopy").onclick=()=>navigator.clipboard?.writeText(document.getElementById("dtxtout").textContent);
+      document.getElementById("dtxtsave").onclick=()=>{const t=document.getElementById("dtxtout").textContent;if(!t||t.startsWith("O resultado"))return alert("Nada para salvar.");DB.degravacoes.push({id:uid(),tipo:"Texto",data:new Date().toLocaleDateString("pt-BR"),texto:t});saveDB();alert("Salvo!");draw();};
+      document.getElementById("dtxtorg").onclick=async()=>{
+        const txt=document.getElementById("dtxtin").value;if(!txt.trim())return;
+        const fmt=document.getElementById("dtxtfmt").value;
+        document.getElementById("dtxtorg").textContent="Organizando...";
+        try{const r=await apiIA("Organize a transcrição no formato de "+fmtP(fmt)+".",[{role:"user",content:txt}]);document.getElementById("dtxtout").style.color="#1C2B3A";document.getElementById("dtxtout").textContent=r;txtOut=r;}
+        catch(e){document.getElementById("dtxtout").textContent="❌ "+e.message;}
+        document.getElementById("dtxtorg").textContent="🤖 Organizar com IA";
+      };
+    }
+
+    if(aba==="upload"){
+      document.getElementById("uploadfile").onchange=e=>{
+        const f=e.target.files[0];
+        if(f)document.getElementById("uploadname").textContent=f.name+" ("+Math.round(f.size/1024)+"KB)";
+      };
+      document.getElementById("uploadcopy").onclick=()=>navigator.clipboard?.writeText(document.getElementById("uploadout").textContent);
+      document.getElementById("uploadsave").onclick=()=>{const t=document.getElementById("uploadout").textContent;if(!t||t.startsWith("O resultado"))return alert("Nada para salvar.");DB.degravacoes.push({id:uid(),tipo:"Upload",data:new Date().toLocaleDateString("pt-BR"),texto:t});saveDB();alert("Salvo!");draw();};
+      document.getElementById("uploadorg").onclick=async()=>{
+        const file=document.getElementById("uploadfile").files[0];
+        if(!file)return alert("Selecione um arquivo primeiro.");
+        if(file.size>10*1024*1024)return alert("Arquivo muito grande. Máximo 10MB.");
+        const fmt=document.getElementById("uploadfmt").value;
+        document.getElementById("uploadorg").textContent="Processando...";
+        document.getElementById("uploadout").textContent="⏳ Lendo o arquivo...";
+        try{
+          const text=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(file,'utf-8');});
+          document.getElementById("uploadout").textContent="⏳ Organizando com IA...";
+          const prompt=`O conteúdo a seguir é uma transcrição extraída de um arquivo de mídia. Organize no formato de ${fmtP(fmt)}:\n\n${text.substring(0,8000)}`;
+          const r=await apiIA("Você é assistente jurídico. Organize transcrições de forma profissional.",[{role:"user",content:prompt}]);
+          document.getElementById("uploadout").style.color="#1C2B3A";document.getElementById("uploadout").textContent=r;uploadOut=r;
+        }catch(e){document.getElementById("uploadout").textContent="❌ "+e.message+"\n\nDica: para áudios/vídeos, extraia o texto via YouTube ou Meet e use a aba Colar Texto.";}
+        document.getElementById("uploadorg").textContent="🤖 Transcrever com IA";
+      };
+    }
+
+    if(aba==="vivo"){
+      document.getElementById("dvcopy").onclick=()=>navigator.clipboard?.writeText(document.getElementById("dvout").textContent);
+      document.getElementById("dvsave").onclick=()=>{const t=document.getElementById("dvout").textContent;if(!t||t.startsWith("O resultado"))return alert("Nada para salvar.");DB.degravacoes.push({id:uid(),tipo:"Gravação",data:new Date().toLocaleDateString("pt-BR"),texto:t});saveDB();alert("Salvo!");draw();};
+      document.getElementById("dvstart").onclick=()=>{
+        const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert("Use Chrome ou Edge.");return;}
+        srRef.current=new SR();srRef.current.lang="pt-BR";srRef.current.continuous=true;srRef.current.interimResults=true;
+        srRef.current.onresult=e=>{let t="";for(let i=0;i<e.results.length;i++)t+=e.results[i][0].transcript+" ";vivoTxt=t;document.getElementById("dvivo-txt").textContent=t;};
+        srRef.current.start();document.getElementById("dvivo-icon").textContent="🔴";document.getElementById("dvivo-st").textContent="Gravando...";
+      };
+      document.getElementById("dvstop").onclick=()=>{if(srRef.current)srRef.current.stop();document.getElementById("dvivo-icon").textContent="🎙️";document.getElementById("dvivo-st").textContent="Pronto";};
+      document.getElementById("dvorg").onclick=async()=>{
+        if(!vivoTxt.trim())return;const fmt=document.getElementById("dvfmt").value;
+        document.getElementById("dvorg").textContent="Organizando...";
+        try{const r=await apiIA("Organize no formato de "+fmtP(fmt)+".",[{role:"user",content:vivoTxt}]);document.getElementById("dvout").style.color="#1C2B3A";document.getElementById("dvout").textContent=r;vivoOut=r;}
+        catch(e){document.getElementById("dvout").textContent="❌ "+e.message;}
+        document.getElementById("dvorg").textContent="🤖 Organizar com IA";
+      };
+    }
+  }
+  draw();
+}
+
+
+// ── ASSISTENTE IA ──
+let iaMsgs=[{r:"bot",t:"Olá! Sou o assistente jurídico do HJ ADV.\n\nTenho acesso a:\n• Legislação brasileira completa\n• Doutrina de referência (Nucci, Didier, Tartuce, Moraes e outros)\n• Súmulas do STF e STJ embutidas\n• Seu acervo próprio\n\nComo posso ajudar?"}];
+let iaSelLeg=[],iaSelDout=[],iaSelSum=[];
+function pgIA(el){
+  function draw(){
+    el.innerHTML=`
+    <div style="margin-bottom:11px;"><h1 style="font-size:22px;color:${C.navy};">🤖 Assistente Jurídico</h1><p style="font-family:sans-serif;font-size:10px;color:${C.gray};margin-top:2px;">Legislação · Doutrina · Súmulas · Acervo próprio</p></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px;">
+      ${card(`<div style="font-family:sans-serif;font-size:9px;font-weight:700;color:${C.navy};margin-bottom:5px;text-transform:uppercase;">📜 Legislação</div><div style="display:flex;flex-wrap:wrap;gap:3px;">${LEGS.map((l,i)=>ck(l,"ileg-"+i,iaSelLeg.includes(i))).join("")}</div>`)}
+      ${card(`<div style="font-family:sans-serif;font-size:9px;font-weight:700;color:${C.navy};margin-bottom:5px;text-transform:uppercase;">📚 Doutrina</div><div style="display:flex;flex-wrap:wrap;gap:3px;">${DOUTS.map((d,i)=>ck(d,"idout-"+i,iaSelDout.includes(i))).join("")}</div>`)}
+    </div>
+    ${card(`<div style="font-family:sans-serif;font-size:9px;font-weight:700;color:${C.navy};margin-bottom:5px;text-transform:uppercase;">⚖️ Súmulas e Teses (offline)</div><div style="display:flex;flex-wrap:wrap;gap:3px;">${SUMS.map((s,i)=>ck(s,"isum-"+i,iaSelSum.includes(i))).join("")}</div>`,"margin-bottom:9px;")}
+    <div style="border:1px solid ${C.gray2};border-radius:9px;overflow:hidden;">
+      <div id="iachat" style="height:320px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;">
+        ${iaMsgs.map(m=>`<div style="max-width:83%;padding:8px 12px;border-radius:${m.r==="user"?"11px 11px 3px 11px":"11px 11px 11px 3px"};background:${m.r==="user"?C.navy:C.cream};color:${m.r==="user"?"#fff":C.text};font-family:sans-serif;font-size:12px;line-height:1.65;align-self:${m.r==="user"?"flex-end":"flex-start"};">${m.t.replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>").replace(/\n/g,"<br/>")}</div>`).join("")}
+      </div>
+      <div style="padding:8px 10px;border-top:1px solid ${C.gray2};display:flex;gap:5px;">
+        <input id="iainp" placeholder="Consulta jurídica... (Enter para enviar)" style="flex:1;padding:7px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-family:sans-serif;font-size:12px;outline:none;"/>
+        <button id="iaclr" style="padding:6px 9px;border:1.5px solid ${C.gray2};border-radius:7px;background:transparent;cursor:pointer;font-size:11px;">🗑</button>
+        ${btn("Enviar","iaenv")}
+      </div>
+    </div>`;
+    const chat=document.getElementById("iachat");chat.scrollTop=chat.scrollHeight;
+    document.querySelectorAll("[id^='ileg-']").forEach(el=>{el.onclick=()=>{const i=parseInt(el.id.replace("ileg-",""));iaSelLeg=iaSelLeg.includes(i)?iaSelLeg.filter(x=>x!==i):[...iaSelLeg,i];draw();};});
+    document.querySelectorAll("[id^='idout-']").forEach(el=>{el.onclick=()=>{const i=parseInt(el.id.replace("idout-",""));iaSelDout=iaSelDout.includes(i)?iaSelDout.filter(x=>x!==i):[...iaSelDout,i];draw();};});
+    document.querySelectorAll("[id^='isum-']").forEach(el=>{el.onclick=()=>{const i=parseInt(el.id.replace("isum-",""));iaSelSum=iaSelSum.includes(i)?iaSelSum.filter(x=>x!==i):[...iaSelSum,i];draw();};});
+    document.getElementById("iaclr").onclick=()=>{iaMsgs=[{r:"bot",t:"Chat limpo. Como posso ajudar?"}];draw();};
+    const enviar=async()=>{
+      const txt=document.getElementById("iainp").value.trim();if(!txt)return;
+      iaMsgs.push({r:"user",t:txt},{r:"bot",t:"⚙️ Consultando..."});
+      document.getElementById("iainp").value="";draw();
+      const legs=iaSelLeg.length?iaSelLeg.map(i=>LEGS[i]).join(", "):"toda a legislação brasileira";
+      const douts=iaSelDout.length?iaSelDout.map(i=>DOUTS[i]).join(", "):"Nucci, Didier, Tartuce, Moraes";
+      const sys=`Você é assistente jurídico do escritório HJ ADV (Rio Grande do Sul, Brasil). Responda em português.\nBase legal: ${legs}\nDoutrina: ${douts}\n${SSUM}${iaSelDout.length?"\n"+SDOUT:""}\nCite sempre o artigo específico da lei. Use **negrito** para pontos importantes.`;
+      const hist=iaMsgs.filter(m=>m.t!=="⚙️ Consultando...").slice(0,-1).map(m=>({role:m.r==="user"?"user":"assistant",content:m.t}));
+      try{const r=await apiIA(sys,[...hist,{role:"user",content:txt}]);iaMsgs[iaMsgs.length-1]={r:"bot",t:r};}
+      catch(e){iaMsgs[iaMsgs.length-1]={r:"bot",t:"❌ Erro: "+e.message+"\n\nVerifique sua conexão e as configurações do servidor."};}
+      draw();
+    };
+    document.getElementById("iaenv").onclick=enviar;
+    document.getElementById("iainp").onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();enviar();}};
+  }
+  draw();
+}
+function ck(label,id,sel){return`<label id="${id}" style="display:flex;align-items:center;gap:3px;cursor:pointer;font-family:sans-serif;font-size:10px;padding:2px 6px;background:${sel?"rgba(201,168,76,.15)":C.gray2};border-radius:4px;border:${sel?`1px solid ${C.gold}`:"1px solid transparent"};color:${sel?C.navy:C.gray};font-weight:${sel?700:400};user-select:none;"><input type="checkbox" ${sel?"checked":""} style="pointer-events:none;accent-color:${C.gold};"/>${label}</label>`;}
+
+// ── CONFIGURAÇÕES ──
+function pgConfig(el){
+  if(SESS.role!=="admin"){el.innerHTML=`<p style="font-family:sans-serif;color:${C.red};">Acesso restrito ao administrador.</p>`;return;}
+  function draw(){
+    const esc=DB.escritorio||{nome:"",oab:"",end:"",tel:"",email:"",logo:""};
+    el.innerHTML=`
+    <div style="margin-bottom:18px;"><h1 style="font-size:22px;color:${C.navy};">⚙️ Configurações</h1></div>
+
+    ${card(`<div style="font-size:13px;color:${C.navy};margin-bottom:13px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};font-weight:600;">🏛 Dados do Escritório</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;">
+        ${inp("Nome do Escritório","escnome","text",esc.nome,"Ex: Silva & Associados Advocacia")}
+        ${inp("OAB","escoab","text",esc.oab,"Ex: OAB/RS 12.345")}
+        ${inp("Telefone","esctel","text",esc.tel,"Ex: (51) 99999-0000")}
+        ${inp("E-mail","escemail","email",esc.email,"contato@escritorio.com.br")}
+      </div>
+      ${inp("Endereço","escend","text",esc.end,"Rua, Número, Bairro, Cidade/UF")}
+      <div style="display:flex;gap:8px;justify-content:flex-end;">${btn("Salvar Dados","escsave")}<div id="escst" style="font-family:sans-serif;font-size:11px;color:${C.green};margin-top:9px;display:none;">✅ Dados salvos!</div></div>
+    `,"margin-bottom:14px;")}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+      ${card(`<div style="font-size:13px;color:${C.navy};margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};font-weight:600;">🔒 Senha Admin</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">${inp("Nova senha","cp1","password")}${inp("Confirmar","cp2","password")}</div>
+        ${btn("Atualizar Senha","cpsave")}<div id="cpst" style="font-family:sans-serif;font-size:11px;color:${C.green};margin-top:7px;"></div>`)}
+      ${card(`<div style="font-size:13px;color:${C.navy};margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};font-weight:600;">ℹ️ Sobre o Sistema</div>
+        <div style="font-family:sans-serif;font-size:12px;color:${C.gray};line-height:1.8;">
+          <div>🤖 <strong>IA integrada</strong> via servidor seguro — sem exposição de chave</div>
+          <div>💾 <strong>Dados salvos</strong> no navegador (localStorage)</div>
+          <div>📵 <strong>Offline:</strong> Processos, Prazos, Financeiro, Jurisprudências</div>
+          <div>🌐 <strong>Online (só IA):</strong> Assistente, Degravação, Interpretar eproc</div>
+        </div>`)}
+    </div>
+    ${card(`<div style="font-size:13px;color:${C.navy};margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};font-weight:600;">👥 Senhas dos Usuários</div>
+      <table><thead><tr style="background:${C.navy};">${["Nome","Tipo","Login","Nova Senha",""].map(h=>`<th style="padding:8px 12px;color:${C.gold};font-size:9px;font-weight:700;text-align:left;text-transform:uppercase;">${h}</th>`).join("")}</tr></thead>
+      <tbody>${[...DB.advogados.map(a=>({...a,tipo:"Advogado"})),...DB.estagiarios.map(e=>({...e,tipo:"Estagiário"}))].map((u,i)=>`<tr style="border-bottom:1px solid ${C.gray2};background:${i%2===0?"#fff":"#fafbfd"};">
+        <td style="padding:8px 12px;font-weight:600;font-size:12px;">${u.nome}</td>
+        <td style="padding:8px 12px;">${badge(u.tipo==="Advogado"?"Em andamento":"Arquivado")}</td>
+        <td style="padding:8px 12px;font-family:monospace;font-size:11px;">${u.login||"—"}</td>
+        <td style="padding:8px 12px;"><input id="usp-${u.id}" type="password" value="${u.senha||""}" style="padding:4px 7px;border:1.5px solid ${C.gray2};border-radius:6px;font-family:sans-serif;font-size:11px;width:120px;outline:none;"/></td>
+        <td style="padding:8px 12px;">${btn("Salvar","ussave-"+u.id,"ghost",true)}</td>
+      </tr>`).join("")}</tbody></table>`)}`;
+    document.getElementById("escsave").onclick=()=>{
+      DB.escritorio={
+        nome:document.getElementById("escnome").value,
+        oab:document.getElementById("escoab").value,
+        tel:document.getElementById("esctel").value,
+        email:document.getElementById("escemail").value,
+        end:document.getElementById("escend").value
+      };
+      saveDB();
+      const st=document.getElementById("escst");st.style.display="block";setTimeout(()=>st.style.display="none",3000);
+    };
+    document.getElementById("cpsave").onclick=()=>{
+      const p1=document.getElementById("cp1").value,p2=document.getElementById("cp2").value;
+      if(!p1||!p2)return alert("Preencha os dois campos.");if(p1!==p2)return alert("Senhas não coincidem.");if(p1.length<4)return alert("Senha muito curta.");
+      DB.adminPass=p1;saveDB();document.getElementById("cpst").textContent="✅ Senha atualizada!";
+    };
+    document.querySelectorAll("[id^='ussave-']").forEach(b=>{b.onclick=()=>{
+      const id=b.id.replace("ussave-","");const s=document.getElementById("usp-"+id).value;if(!s||s.length<3)return alert("Senha muito curta.");
+      DB.advogados=DB.advogados.map(a=>a.id==id?{...a,senha:s}:a);
+      DB.estagiarios=DB.estagiarios.map(e=>e.id==id?{...e,senha:s}:e);
+      saveDB();alert("Senha atualizada!");
+    };});
+  }
+  draw();
+}
+
+
+// ═══ MODELOS DE PEÇAS PROCESSUAIS ═══
+const PECAS_DB = {
+  "Cível":[
+    {tit:"Petição Inicial — Cobrança",tags:["cobrança","dívida"],modelo:`EXMO(A). SR(A). JUIZ(A) DE DIREITO DA ___ VARA CÍVEL DA COMARCA DE ___
+
+[NOME DO AUTOR], [qualificação completa], vem respeitosamente à presença de V.Exa., por meio de seu advogado infra-assinado, propor a presente
+
+AÇÃO DE COBRANÇA
+
+em face de [NOME DO RÉU], [qualificação], pelos fatos e fundamentos a seguir expostos:
+
+I — DOS FATOS
+[Descreva os fatos que originaram a dívida]
+
+II — DO DIREITO
+Nos termos dos arts. 389 e 395 do Código Civil, o inadimplemento da obrigação gera para o devedor o dever de indenizar perdas e danos, juros e correção monetária.
+
+III — DO PEDIDO
+Ante o exposto, requer:
+a) A citação do réu;
+b) A procedência do pedido para condenar o réu ao pagamento de R$ [VALOR];
+c) Juros de mora de 1% ao mês desde a citação;
+d) Correção monetária pelo IGPM;
+e) Honorários advocatícios de 20%;
+f) Custas processuais.
+
+Dá-se à causa o valor de R$ [VALOR].
+
+Termos em que pede deferimento.
+
+[LOCAL], [DATA]
+
+[NOME DO ADVOGADO]
+OAB/__ nº ___`},
+    {tit:"Contestação — Geral",tags:["contestação","defesa"],modelo:`EXMO(A). SR(A). JUIZ(A) DE DIREITO DA ___ VARA CÍVEL
+
+Processo nº ___
+
+[NOME DO RÉU], já qualificado nos autos, vem apresentar
+
+CONTESTAÇÃO
+
+I — PRELIMINARES
+[Indique eventuais preliminares: inépcia da inicial, ilegitimidade, etc.]
+
+II — DA IMPUGNAÇÃO AOS FATOS
+[Impugne especificamente cada fato narrado pelo autor]
+
+III — DO DIREITO
+[Fundamente juridicamente a defesa]
+
+IV — DO PEDIDO
+Requer a improcedência total dos pedidos da parte autora, com condenação em honorários.
+
+[LOCAL], [DATA]
+[ADVOGADO / OAB]`},
+    {tit:"Recurso de Apelação",tags:["apelação","recurso"],modelo:`EXMO(A). SR(A). JUIZ(A) DE DIREITO DA ___ VARA CÍVEL
+
+Processo nº ___
+
+[NOME], por seu advogado, vem interpor
+
+RECURSO DE APELAÇÃO
+
+com fundamento no art. 1.009 do CPC, pelas razões a seguir:
+
+I — DA ADMISSIBILIDADE
+O recurso é tempestivo, cabível e o recorrente é parte legítima.
+
+II — DAS RAZÕES
+[Aponte os erros da sentença — error in judicando ou error in procedendo]
+
+III — DO PEDIDO
+Requer o conhecimento e provimento do recurso para reformar a sentença.
+
+[LOCAL], [DATA]
+[ADVOGADO / OAB]`}
+  ],
+  "Penal":[
+    {tit:"Habeas Corpus",tags:["HC","liberdade","prisão"],modelo:`EXMO(A). SR(A). DESEMBARGADOR(A) RELATOR(A) DO ___ TRIBUNAL
+
+[NOME DO IMPETRANTE], advogado, OAB/__ nº ___, vem impetrar
+
+HABEAS CORPUS
+
+com pedido de liminar, em favor de [PACIENTE], preso em [LOCAL], pelos fatos e fundamentos:
+
+I — DA ILEGALIDADE DA PRISÃO
+[Descreva a ilegalidade: excesso de prazo, falta de fundamentação, etc.]
+
+II — DO DIREITO
+Art. 5º, LXVIII da CF: "Conceder-se-á habeas corpus sempre que alguém sofrer ou se achar ameaçado de sofrer violência ou coação em sua liberdade de locomoção."
+
+III — DO PEDIDO LIMINAR
+Requer liminar para expedição de alvará de soltura.
+
+IV — DO PEDIDO FINAL
+A concessão definitiva da ordem.
+
+[LOCAL], [DATA]
+[ADVOGADO / OAB]`},
+    {tit:"Defesa Prévia",tags:["defesa","resposta","penal"],modelo:`EXMO(A). SR(A). JUIZ(A) DE DIREITO DA ___ VARA CRIMINAL
+
+Processo nº ___
+
+[NOME DO ACUSADO], por seu defensor, vem apresentar
+
+RESPOSTA À ACUSAÇÃO
+
+nos termos do art. 396-A do CPP:
+
+I — DAS PRELIMINARES
+[Inépcia da denúncia, incompetência, etc.]
+
+II — DO MÉRITO
+[Negue os fatos ou apresente excludentes: legítima defesa, estado de necessidade, etc.]
+
+III — DAS PROVAS
+Requer oitiva das testemunhas arroladas abaixo:
+1. [Nome], [endereço]
+2. [Nome], [endereço]
+
+IV — DO PEDIDO
+Requer a absolvição sumária ou, se não, o regular prosseguimento do feito.
+
+[LOCAL], [DATA]
+[DEFENSOR / OAB]`}
+  ],
+  "Trabalhista":[
+    {tit:"Reclamação Trabalhista",tags:["CLT","verbas","rescisão"],modelo:`EXMO(A). SR(A). JUIZ(A) DO TRABALHO DA ___ VARA DO TRABALHO DE ___
+
+[NOME DO RECLAMANTE], [qualificação], vem propor
+
+RECLAMAÇÃO TRABALHISTA
+
+em face de [NOME DA EMPRESA], pelos fatos e fundamentos:
+
+I — DO VÍNCULO EMPREGATÍCIO
+O reclamante trabalhou para a reclamada de [DATA INÍCIO] a [DATA FIM], exercendo a função de [CARGO], com salário de R$ [VALOR].
+
+II — DAS VERBAS DEVIDAS
+a) Saldo de salário: R$ ___
+b) Aviso prévio: R$ ___
+c) 13º salário proporcional: R$ ___
+d) Férias + 1/3: R$ ___
+e) FGTS + multa de 40%: R$ ___
+f) Horas extras: R$ ___
+
+III — DO PEDIDO
+Requer a procedência para condenar a reclamada ao pagamento das verbas acima, totalizando R$ [TOTAL].
+
+[LOCAL], [DATA]
+[ADVOGADO / OAB]`}
+  ],
+  "Família":[
+    {tit:"Ação de Divórcio",tags:["divórcio","separação"],modelo:`EXMO(A). SR(A). JUIZ(A) DE DIREITO DA ___ VARA DE FAMÍLIA
+
+[NOME], vem propor
+
+AÇÃO DE DIVÓRCIO [CONSENSUAL / LITIGIOSO]
+
+em face de [NOME DO CÔNJUGE]:
+
+I — DOS FATOS
+Os requerentes contraíram matrimônio em [DATA], sob o regime de [REGIME]. A convivência tornou-se insuportável desde [DATA].
+
+II — DA PARTILHA
+[Descreva os bens a partilhar ou informe que não há bens]
+
+III — DOS FILHOS
+[Se houver: guarda, alimentos, visitas]
+
+IV — DO PEDIDO
+a) Decretação do divórcio;
+b) Partilha de bens conforme proposta;
+c) Fixação de alimentos no valor de R$ ___ mensais.
+
+[LOCAL], [DATA]
+[ADVOGADO / OAB]`}
+  ],
+  "Administrativo":[
+    {tit:"Recurso Administrativo",tags:["recurso","multa","auto de infração"],modelo:`ILMO(A). SR(A). [AUTORIDADE]
+
+[NOME], [qualificação], vem interpor
+
+RECURSO ADMINISTRATIVO
+
+em face do [AUTO DE INFRAÇÃO / ATO ADMINISTRATIVO] nº ___, nos termos do art. ___ da Lei ___:
+
+I — DOS FATOS
+[Descreva os fatos]
+
+II — DO DIREITO
+[Fundamente a ilegalidade ou desproporcionalidade do ato]
+
+III — DO PEDIDO
+O recebimento e provimento do recurso para anular o ato impugnado.
+
+[LOCAL], [DATA]
+[NOME / OAB ou CPF]`}
+  ],
+  "Trânsito":[
+    {tit:"Defesa de Auto de Infração",tags:["multa","trânsito","DETRAN"],modelo:`ILMO(A). SR(A). DIRETOR(A) DE TRÂNSITO / JARI
+
+[NOME], [qualificação], condutor do veículo [MARCA/MODELO], placa [PLACA], vem apresentar
+
+DEFESA DE AUTO DE INFRAÇÃO
+
+referente ao AIT nº ___, lavrado em [DATA]:
+
+I — DOS FATOS
+[Descreva por que a infração é indevida]
+
+II — DO DIREITO
+O CTB em seu art. 281 garante o contraditório e ampla defesa ao autuado.
+
+III — DO PEDIDO
+O cancelamento do auto de infração por [ilegalidade / erro / nulidade formal].
+
+[LOCAL], [DATA]
+[NOME / CPF]`}
+  ]
+};
+
+function pgPecas(el){
+  let area="Cível",busca="",pecaSel=null;
+  function draw(){
+    const lista=(PECAS_DB[area]||[]).filter(p=>!busca||p.tit.toLowerCase().includes(busca)||p.tags.some(t=>t.toLowerCase().includes(busca)));
+    el.innerHTML=`
+    <div style="margin-bottom:16px;">
+      <h1 style="font-size:22px;color:${C.navy};">📄 Modelos de Peças Processuais</h1>
+      <p style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-top:2px;">Selecione, edite e copie o modelo</p>
+    </div>
+    <div style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;">
+      <input id="pbusca2" value="${busca}" placeholder="Buscar peça..." style="flex:1;min-width:150px;padding:7px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-family:sans-serif;font-size:12px;outline:none;"/>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        ${Object.keys(PECAS_DB).map(a=>`<button data-area="${a}" style="font-family:sans-serif;font-size:11px;font-weight:${area===a?700:400};padding:5px 11px;border-radius:6px;border:${area===a?`2px solid ${C.gold}`:`1px solid ${C.gray2}`};background:${area===a?"rgba(201,168,76,.15)":"#fff"};color:${area===a?C.navy:C.gray};cursor:pointer;">${a}</button>`).join("")}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:280px 1fr;gap:14px;">
+      <div>
+        ${lista.map(p=>`<div data-peca="${p.tit}" style="padding:11px 13px;background:${pecaSel===p.tit?"rgba(201,168,76,.12)":"#fff"};border:${pecaSel===p.tit?`2px solid ${C.gold}`:`1px solid ${C.gray2}`};border-radius:8px;cursor:pointer;margin-bottom:6px;">
+          <div style="font-family:sans-serif;font-weight:600;font-size:13px;color:${C.navy};">${p.tit}</div>
+          <div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap;">${p.tags.map(t=>`<span style="background:${C.navy}10;color:${C.navy};border-radius:3px;padding:1px 5px;font-size:9px;font-family:sans-serif;">#${t}</span>`).join("")}</div>
+        </div>`).join("")}
+        ${lista.length===0?`<p style="font-family:sans-serif;font-size:12px;color:${C.gray};">Nenhum modelo encontrado.</p>`:""}
+      </div>
+      <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:18px;">
+        ${pecaSel?(()=>{
+          const p=(PECAS_DB[area]||[]).find(x=>x.tit===pecaSel);
+          if(!p)return`<p style="font-family:sans-serif;color:${C.gray};">Selecione um modelo.</p>`;
+          return`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="font-weight:700;font-size:15px;color:${C.navy};">${p.tit}</div>
+            <div style="display:flex;gap:6px;">
+              <button id="pccopy" style="padding:6px 12px;background:${C.navy};color:#fff;border:none;border-radius:7px;font-family:sans-serif;font-size:11px;font-weight:700;cursor:pointer;">📋 Copiar</button>
+              <button id="pcgemia" style="padding:6px 12px;background:${C.gold};color:${C.navy};border:none;border-radius:7px;font-family:sans-serif;font-size:11px;font-weight:700;cursor:pointer;">🤖 Personalizar com IA</button>
+            </div>
+          </div>
+          <textarea id="pcedit" rows="22" style="width:100%;padding:10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:monospace;outline:none;resize:vertical;box-sizing:border-box;line-height:1.7;">${p.modelo}</textarea>`;
+        })():`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:${C.gray};font-family:sans-serif;font-size:13px;"><span style="font-size:36px;margin-bottom:9px;">📄</span>Selecione um modelo à esquerda</div>`}
+      </div>
+    </div>`;
+    document.getElementById("pbusca2").oninput=e=>{busca=e.target.value.toLowerCase();draw();};
+    document.querySelectorAll("[data-area]").forEach(b=>{b.onclick=()=>{area=b.dataset.area;pecaSel=null;draw();};});
+    document.querySelectorAll("[data-peca]").forEach(b=>{b.onclick=()=>{pecaSel=b.dataset.peca;draw();};});
+    if(pecaSel){
+      const cp=document.getElementById("pccopy");
+      const gm=document.getElementById("pcgemia");
+      if(cp)cp.onclick=()=>{navigator.clipboard?.writeText(document.getElementById("pcedit").value);alert("Modelo copiado!");};
+      if(gm)gm.onclick=async()=>{
+        const modelo=document.getElementById("pcedit").value;
+        const det=prompt("Descreva os dados do caso (partes, fatos, valores):");
+        if(!det)return;
+        gm.textContent="Gerando...";
+        try{
+          const r=await apiIA("Você é advogado especialista. Preencha o modelo de peça processual com os dados fornecidos, mantendo a estrutura jurídica formal. Retorne apenas a peça completa.",
+            [{role:"user",content:`MODELO:
+${modelo}
+
+DADOS DO CASO:
+${det}`}]);
+          document.getElementById("pcedit").value=r;
+        }catch(e){alert("Erro: "+e.message);}
+        gm.textContent="🤖 Personalizar com IA";
+      };
+    }
+  }
+  draw();
+}
+
+// ═══ VIDEOCHAMADA JITSI ═══
+function pgVideochamada(el){
+  let sala=`hjadv-${Math.random().toString(36).slice(2,8)}`;
+  el.innerHTML=`
+  <div style="margin-bottom:16px;">
+    <h1 style="font-size:22px;color:${C.navy};">📹 Videochamada</h1>
+    <p style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-top:2px;">Powered by Jitsi Meet — gratuito, sem instalação</p>
+  </div>
+  <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;margin-bottom:14px;">
+    <div style="font-family:sans-serif;font-size:13px;font-weight:600;color:${C.navy};margin-bottom:11px;">Nova videochamada</div>
+    <div style="display:flex;gap:9px;align-items:flex-end;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;">Nome da sala</label>
+        <input id="vsala" value="${sala}" style="width:100%;padding:8px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:13px;font-family:sans-serif;outline:none;box-sizing:border-box;"/>
+      </div>
+      <button id="vinicio" style="padding:9px 18px;background:${C.gold};color:${C.navy};border:none;border-radius:7px;font-family:sans-serif;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;">📹 Iniciar / Entrar</button>
+      <button id="vcopy" style="padding:9px 14px;background:${C.navy};color:#fff;border:none;border-radius:7px;font-family:sans-serif;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">🔗 Copiar link</button>
+    </div>
+    <div style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-top:7px;">Link para compartilhar: <span id="vlink" style="color:${C.blue};font-weight:600;">https://meet.jit.si/${sala}</span></div>
+  </div>
+  <div id="vjitsi" style="display:none;border-radius:11px;overflow:hidden;border:1px solid ${C.gray2};"></div>`;
+  document.getElementById("vsala").oninput=e=>{sala=e.target.value.replace(/\s+/g,"-");document.getElementById("vlink").textContent=`https://meet.jit.si/${sala}`;};
+  document.getElementById("vcopy").onclick=()=>{navigator.clipboard?.writeText(`https://meet.jit.si/${sala}`);alert("Link copiado!");};
+  document.getElementById("vinicio").onclick=()=>{
+    const s=document.getElementById("vsala").value||sala;
+    const jitsiDiv=document.getElementById("vjitsi");
+    jitsiDiv.style.display="block";
+    jitsiDiv.style.height="520px";
+    jitsiDiv.innerHTML=`<iframe src="https://meet.jit.si/${s}" allow="camera; microphone; fullscreen; display-capture" style="width:100%;height:100%;border:none;"></iframe>`;
+  };
+}
+
+// ═══ BOT WHATSAPP ═══
+function pgWhatsApp(el){
+  let waStatus="desconectado",waQR=null;
+  const socket=typeof io!=="undefined"?io():null;
+  if(socket){
+    socket.on("wa_status",data=>{waStatus=data.status;waQR=data.qr;draw();});
+  }
+  async function checkStatus(){
+    try{const r=await fetch("/api/whatsapp/status");const d=await r.json();waStatus=d.status;waQR=d.qr;draw();}catch(e){}
+  }
+  async function iniciar(){
+    await fetch("/api/whatsapp/iniciar",{method:"POST"});waStatus="aguardando_qr";draw();
+  }
+  async function parar(){
+    await fetch("/api/whatsapp/parar",{method:"POST"});waStatus="desconectado";waQR=null;draw();
+  }
+  function draw(){
+    const cor=waStatus==="conectado"?C.green:waStatus==="aguardando_qr"?C.orange:C.gray;
+    const label=waStatus==="conectado"?"Conectado":waStatus==="aguardando_qr"?"Aguardando QR Code...":waStatus==="erro"?"Erro":"Desconectado";
+    el.innerHTML=`
+    <div style="margin-bottom:16px;"><h1 style="font-size:22px;color:${C.navy};">💬 Bot WhatsApp</h1><p style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-top:2px;">Assistente jurídico automático no WhatsApp</p></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;">
+        <div style="font-family:sans-serif;font-size:13px;font-weight:600;color:${C.navy};margin-bottom:14px;">Status da conexão</div>
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:16px;">
+          <div style="width:11px;height:11px;border-radius:50%;background:${cor};flex-shrink:0;"></div>
+          <span style="font-family:sans-serif;font-size:13px;font-weight:600;color:${cor};">${label}</span>
+        </div>
+        ${waQR?`<div style="text-align:center;margin-bottom:14px;">
+          <p style="font-family:sans-serif;font-size:12px;color:${C.gray};margin-bottom:8px;">Abra o WhatsApp → Dispositivos vinculados → Escanear QR</p>
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(waQR)}" style="width:200px;height:200px;border-radius:8px;border:1px solid ${C.gray2};"/>
+        </div>`:""}
+        <div style="display:flex;gap:7px;flex-wrap:wrap;">
+          ${waStatus!=="conectado"?`<button id="wainicio" style="padding:8px 16px;background:${C.gold};color:${C.navy};border:none;border-radius:7px;font-family:sans-serif;font-weight:700;font-size:12px;cursor:pointer;">▶ Conectar</button>`:""}
+          ${waStatus==="conectado"?`<button id="waparar" style="padding:8px 16px;background:rgba(192,57,43,.1);color:${C.red};border:1px solid rgba(192,57,43,.2);border-radius:7px;font-family:sans-serif;font-weight:700;font-size:12px;cursor:pointer;">⏹ Desconectar</button>`:""}
+          <button id="waatualizar" style="padding:8px 14px;background:transparent;color:${C.navy};border:1.5px solid ${C.gray2};border-radius:7px;font-family:sans-serif;font-weight:700;font-size:12px;cursor:pointer;">↻ Atualizar</button>
+        </div>
+      </div>
+      <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;">
+        <div style="font-family:sans-serif;font-size:13px;font-weight:600;color:${C.navy};margin-bottom:11px;">Como funciona</div>
+        <div style="font-family:sans-serif;font-size:12px;color:${C.gray};line-height:1.9;">
+          <div>1. Clique em <strong>Conectar</strong></div>
+          <div>2. Escaneie o QR Code com seu WhatsApp</div>
+          <div>3. O bot começa a responder automaticamente</div>
+          <div style="margin-top:10px;padding:10px;background:${C.cream};border-radius:7px;">
+            <div style="font-weight:700;color:${C.navy};margin-bottom:5px;">Comandos aceitos:</div>
+            <div><code style="background:rgba(0,0,0,.06);padding:1px 5px;border-radius:3px;">/juridico [consulta]</code></div>
+            <div style="margin-top:3px;"><code style="background:rgba(0,0,0,.06);padding:1px 5px;border-radius:3px;">/adv [consulta]</code></div>
+            <div style="margin-top:3px;"><code style="background:rgba(0,0,0,.06);padding:1px 5px;border-radius:3px;">Oi HJADV [consulta]</code></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    if(document.getElementById("wainicio"))document.getElementById("wainicio").onclick=iniciar;
+    if(document.getElementById("waparar"))document.getElementById("waparar").onclick=parar;
+    if(document.getElementById("waatualizar"))document.getElementById("waatualizar").onclick=checkStatus;
+  }
+  checkStatus();
+}
+
+
+// ── INICIAR ──
+render();
+
+// ═══ INICIALIZAR ═══
+telaLogin();
+</script>
+</body>
+</html>
+<script>
+// ═══════════════════════════════════════
+// ROTEIROS DE ATENDIMENTO
+// ═══════════════════════════════════════
+const ROTEIROS = {
+  "Família": {
+    icon: "👨‍👩‍👧",
+    gatilho: "Toda família merece paz. Você não precisa enfrentar isso sozinho(a).",
+    areas: {
+      "Divórcio": {
+        gatilho: "Sabemos que encerrar um relacionamento é difícil. Mas o recomeço começa com uma decisão.",
+        perguntas: [
+          "Há quanto tempo vocês estão separados(as) de fato?",
+          "Tem filhos menores? Se sim, quantos e quais idades?",
+          "Existe acordo entre as partes ou há conflito?",
+          "Há bens a partilhar (imóvel, veículo, empresa)?",
+          "Existe violência doméstica ou medida protetiva?",
+          "Já houve tentativa anterior de divórcio ou mediação?"
+        ],
+        orientacao: "Com base nas respostas, podemos iniciar o processo de divórcio consensual (mais rápido e barato) ou litigioso (quando não há acordo). Nossa equipe vai conduzir você com segurança em cada etapa.",
+        cta: "Agende agora uma consulta gratuita. Vamos ouvir sua história com atenção e cuidado."
+      },
+      "Guarda de Filhos": {
+        gatilho: "Seus filhos merecem estabilidade. Vamos garantir os direitos deles juntos.",
+        perguntas: [
+          "Quantos filhos e quais idades?",
+          "Atualmente com quem os filhos estão?",
+          "Há acordo ou disputa com o outro genitor?",
+          "Existe algum histórico de violência ou negligência?",
+          "O outro genitor paga pensão alimentícia?",
+          "Existe processo judicial em andamento?"
+        ],
+        orientacao: "A guarda compartilhada é a regra no Brasil — mas existem situações que justificam a guarda unilateral. Analisaremos o melhor caminho para proteger o bem-estar das crianças.",
+        cta: "Fale conosco hoje. Cada dia importa quando se trata dos seus filhos."
+      },
+      "Pensão Alimentícia": {
+        gatilho: "Seu filho tem direito. Não deixe que a indiferença do outro genitor prejudique quem você mais ama.",
+        perguntas: [
+          "Quantos filhos e quais idades?",
+          "O outro genitor trabalha formalmente ou de forma autônoma?",
+          "Já existe acordo ou decisão judicial de alimentos?",
+          "Há inadimplência? Se sim, há quanto tempo?",
+          "Qual a renda aproximada do alimentante?",
+          "Você tem comprovantes de gastos com o filho?"
+        ],
+        orientacao: "Podemos ingressar com ação de alimentos, revisional ou execução (caso haja inadimplência). A prisão civil é possível em caso de não pagamento.",
+        cta: "Entre em contato agora. Seu filho não pode esperar."
+      }
+    }
+  },
+  "Trabalhista": {
+    icon: "👷",
+    gatilho: "Você trabalhou. Você merece receber o que é seu por direito.",
+    areas: {
+      "Demissão sem Justa Causa": {
+        gatilho: "Ser demitido é difícil. Mas você tem direitos garantidos pela lei — e nós vamos garanti-los.",
+        perguntas: [
+          "Há quanto tempo trabalhava na empresa?",
+          "Foi demitido sem justa causa ou houve alguma motivação alegada?",
+          "Recebeu todas as verbas rescisórias (FGTS, aviso prévio, 13º)?",
+          "Tinha horas extras não pagas?",
+          "O contrato era formal (carteira assinada)?",
+          "Há quanto tempo foi a demissão?"
+        ],
+        orientacao: "Vamos calcular todas as verbas devidas e verificar se houve irregularidades. O prazo para entrar com reclamação trabalhista é de 2 anos após a demissão.",
+        cta: "Agende uma análise gratuita da sua rescisão agora."
+      },
+      "Assédio Moral": {
+        gatilho: "Nenhum salário justifica humilhação. Você merece respeito — e reparação.",
+        perguntas: [
+          "O assédio era praticado por quem (chefe, colega, empresa)?",
+          "Com que frequência ocorria?",
+          "Há testemunhas ou provas (mensagens, e-mails, áudios)?",
+          "Você sofreu algum dano à saúde (atestados médicos, afastamentos)?",
+          "Já fez alguma denúncia interna na empresa?",
+          "Ainda está empregado(a) ou foi demitido(a)?"
+        ],
+        orientacao: "O assédio moral gera direito a indenização por dano moral. Com provas, as chances de êxito são elevadas.",
+        cta: "Conte sua história para nós. Vamos ouvir e agir."
+      }
+    }
+  },
+  "Criminal": {
+    icon: "⚖️",
+    gatilho: "Todo cidadão tem direito à defesa. Não enfrente o sistema sozinho.",
+    areas: {
+      "Defesa Criminal": {
+        gatilho: "Uma acusação não é uma condenação. Deixe-nos construir sua defesa.",
+        perguntas: [
+          "Qual o crime imputado?",
+          "Já foi preso ou está em liberdade?",
+          "Tem advogado constituído ou está com defensor público?",
+          "Já foi ouvido pela polícia? Assinou algum documento?",
+          "Há provas ou testemunhas a seu favor?",
+          "Qual a fase do processo (inquérito, denúncia, julgamento)?"
+        ],
+        orientacao: "O momento da defesa é crucial. Cada fase processual tem estratégias específicas. Quanto antes nos contatar, mais ampla será nossa atuação.",
+        cta: "Ligue agora. Em casos criminais, cada hora conta."
+      },
+      "Violência Doméstica": {
+        gatilho: "Você não está sozinha. A lei está ao seu lado — e nós também.",
+        perguntas: [
+          "As agressões são físicas, psicológicas ou ambas?",
+          "Já registrou boletim de ocorrência?",
+          "Tem filhos com o agressor?",
+          "Possui provas (fotos, laudos, testemunhas)?",
+          "O agressor reside na mesma casa?",
+          "Já solicitou medida protetiva?"
+        ],
+        orientacao: "Podemos solicitar medida protetiva de urgência, representação criminal e ação de divórcio. Sua segurança vem primeiro.",
+        cta: "Entre em contato agora — confidencialmente. Vamos proteger você."
+      }
+    }
+  },
+  "Trânsito": {
+    icon: "🚗",
+    gatilho: "Uma multa ou suspensão indevida afeta sua vida. Defenda seus direitos.",
+    areas: {
+      "Recurso de Multa": {
+        gatilho: "Multas podem ser contestadas. Não pague antes de verificar se ela é válida.",
+        perguntas: [
+          "Qual o tipo de infração (velocidade, parada proibida, semáforo)?",
+          "A multa já foi notificada ou está no prazo de recurso?",
+          "Você estava dirigindo no momento ou o veículo estava emprestado?",
+          "Tem provas de que a infração não ocorreu (câmeras, testemunhas)?",
+          "Quantos pontos já tem na CNH?",
+          "É reincidente nessa infração?"
+        ],
+        orientacao: "Analisamos a legalidade do auto de infração, equipamentos de medição e procedimentos. Muitas multas são anuladas por vícios formais.",
+        cta: "Nos envie a multa. Fazemos a análise sem custo."
+      },
+      "Suspensão de CNH": {
+        gatilho: "Perder a CNH pode significar perder o emprego. Vamos brigar por ela.",
+        perguntas: [
+          "Quantos pontos acumulados?",
+          "Recebeu notificação de suspensão?",
+          "Dirigir é essencial para sua subsistência (motorista profissional)?",
+          "Tem processo administrativo em andamento?",
+          "Prazo da suspensão previsto?",
+          "Já cometeu infração gravíssima (álcool, fuga)?"
+        ],
+        orientacao: "É possível suspender judicialmente a suspensão da CNH em casos de necessidade comprovada. Atuamos na esfera administrativa e judicial.",
+        cta: "Não espere a suspensão ser efetivada. Consulte-nos agora."
+      }
+    }
+  },
+  "Cível": {
+    icon: "📋",
+    gatilho: "Seus direitos têm valor. Não deixe passar em branco.",
+    areas: {
+      "Dano Moral": {
+        gatilho: "Humilhação, constrangimento e sofrimento têm reparação. A lei garante.",
+        perguntas: [
+          "O que ocorreu? (atendimento, produto, serviço, relação pessoal)",
+          "Tem provas do ocorrido (fotos, prints, testemunhas)?",
+          "Já tentou resolver diretamente com a parte?",
+          "Sofreu algum prejuízo financeiro além do moral?",
+          "Há quanto tempo ocorreu o fato?",
+          "Já registrou reclamação no Procon ou ReclameAqui?"
+        ],
+        orientacao: "O dano moral é reparável quando há comprovação do constrangimento e nexo causal. Valores variam conforme gravidade e condição do réu.",
+        cta: "Conte o que aconteceu. Faremos a avaliação do caso gratuitamente."
+      },
+      "Cobrança Indevida": {
+        gatilho: "Cobrado por algo que não deve? Você pode ser indenizado em dobro.",
+        perguntas: [
+          "Qual o tipo de cobrança (banco, financeira, empresa de telefonia)?",
+          "Tem comprovante de que a dívida não existe ou já foi paga?",
+          "Houve negativação no SPC/Serasa?",
+          "Está sendo cobrado por dívida prescrita?",
+          "Qual o valor cobrado indevidamente?",
+          "Já contestou com a empresa?"
+        ],
+        orientacao: "O Código de Defesa do Consumidor prevê devolução em dobro de cobrança indevida. Negativação indevida gera dano moral.",
+        cta: "Envie os documentos. Resolvemos isso para você."
+      }
+    }
+  },
+  "Previdenciário": {
+    icon: "🏛️",
+    gatilho: "Você contribuiu a vida toda. Agora é hora de receber o que é seu.",
+    areas: {
+      "Aposentadoria": {
+        gatilho: "A burocracia do INSS não pode impedir o seu descanso merecido.",
+        perguntas: [
+          "Qual a idade atual e tempo de contribuição?",
+          "Trabalhou com carteira assinada ou de forma autônoma?",
+          "Tem períodos sem contribuição?",
+          "Exerceu atividade de risco ou insalubre?",
+          "Já solicitou ao INSS e foi negado?",
+          "Tem Extrato do CNIS atualizado?"
+        ],
+        orientacao: "Analisamos o histórico previdenciário completo, identificamos tempo especial e calculamos a melhor modalidade de aposentadoria para seu caso.",
+        cta: "Agende uma análise. Podemos recuperar anos de contribuição que o INSS desconsiderou."
+      },
+      "Benefício Negado": {
+        gatilho: "Uma negativa do INSS não é o fim. Temos o direito de contestar — e vencemos.",
+        perguntas: [
+          "Qual benefício foi negado (auxílio-doença, aposentadoria por invalidez, BPC)?",
+          "Qual o motivo da negativa?",
+          "Tem laudo médico atualizado?",
+          "Já interpôs recurso administrativo?",
+          "Há quanto tempo está sem trabalhar?",
+          "Tem renda familiar? Qual valor aproximado?"
+        ],
+        orientacao: "Recursos administrativos e ações judiciais contra o INSS têm alto índice de êxito quando bem fundamentados. Trabalhamos com honorários de êxito.",
+        cta: "Não desista. Vamos analisar seu caso sem custo inicial."
+      }
+    }
+  }
+};
+
+function pgRoteiros(el) {
+  let areaSel = null, subareaSel = null, etapa = "inicio";
+
+  function draw() {
+    if (etapa === "inicio") {
+      el.innerHTML = `
+      <div style="margin-bottom:18px;">
+        <h1 style="font-size:22px;color:${C.navy};">🗣️ Roteiros de Atendimento</h1>
+        <p style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-top:3px;">Scripts com gatilhos emocionais para captação de clientes por área do Direito</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        ${Object.entries(ROTEIROS).map(([area, dados]) => `
+        <div data-area="${area}" style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;cursor:pointer;transition:.15s;" onmouseover="this.style.borderColor='${C.gold}'" onmouseout="this.style.borderColor='${C.gray2}'">
+          <div style="font-size:28px;margin-bottom:8px;">${dados.icon}</div>
+          <div style="font-size:14px;font-weight:700;color:${C.navy};margin-bottom:6px;">${area}</div>
+          <div style="font-size:11px;color:${C.gray};line-height:1.5;">${dados.gatilho}</div>
+          <div style="margin-top:10px;font-size:10px;color:${C.gold3};font-weight:600;">${Object.keys(dados.areas).length} roteiros →</div>
+        </div>`).join("")}
+      </div>`;
+
+      document.querySelectorAll("[data-area]").forEach(b => {
+        b.onclick = () => { areaSel = b.dataset.area; etapa = "area"; draw(); };
+      });
+    }
+
+    else if (etapa === "area") {
+      const dados = ROTEIROS[areaSel];
+      el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+        <button id="voltar-rot" style="padding:6px 12px;background:transparent;border:1.5px solid ${C.gray2};border-radius:7px;cursor:pointer;font-size:12px;">← Voltar</button>
+        <div>
+          <h1 style="font-size:20px;color:${C.navy};">${dados.icon} ${areaSel}</h1>
+          <p style="font-family:sans-serif;font-size:11px;color:${C.gray};">Selecione o roteiro de atendimento</p>
+        </div>
+      </div>
+      <div style="background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);border-radius:9px;padding:14px 16px;margin-bottom:18px;font-family:sans-serif;font-size:13px;color:${C.gold3};line-height:1.6;">
+        💬 <strong>Abertura sugerida:</strong> "${dados.gatilho}"
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        ${Object.entries(dados.areas).map(([sub, r]) => `
+        <div data-sub="${sub}" style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:18px;cursor:pointer;" onmouseover="this.style.borderColor='${C.gold}'" onmouseout="this.style.borderColor='${C.gray2}'">
+          <div style="font-size:14px;font-weight:700;color:${C.navy};margin-bottom:6px;">${sub}</div>
+          <div style="font-size:11px;color:${C.gray};line-height:1.5;margin-bottom:10px;">${r.gatilho}</div>
+          <div style="font-size:10px;color:${C.blue};font-weight:600;">${r.perguntas.length} perguntas-chave →</div>
+        </div>`).join("")}
+      </div>`;
+
+      document.getElementById("voltar-rot").onclick = () => { etapa = "inicio"; draw(); };
+      document.querySelectorAll("[data-sub]").forEach(b => {
+        b.onclick = () => { subareaSel = b.dataset.sub; etapa = "roteiro"; draw(); };
+      });
+    }
+
+    else if (etapa === "roteiro") {
+      const r = ROTEIROS[areaSel].areas[subareaSel];
+      el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+        <button id="voltar-sub" style="padding:6px 12px;background:transparent;border:1.5px solid ${C.gray2};border-radius:7px;cursor:pointer;font-size:12px;">← Voltar</button>
+        <div>
+          <h1 style="font-size:20px;color:${C.navy};">${subareaSel}</h1>
+          <p style="font-family:sans-serif;font-size:11px;color:${C.gray};">${areaSel}</p>
+        </div>
+        <button id="copiar-rot" style="margin-left:auto;padding:7px 14px;background:${C.gold};color:${C.navy};border:none;border-radius:7px;cursor:pointer;font-weight:700;font-size:12px;">📋 Copiar Roteiro</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div>
+          <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:18px;margin-bottom:12px;">
+            <div style="font-size:12px;font-weight:700;color:${C.navy};margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">💬 Abertura — Gatilho Emocional</div>
+            <div style="font-family:sans-serif;font-size:13px;color:${C.text};line-height:1.7;background:rgba(201,168,76,.06);border-radius:7px;padding:12px;font-style:italic;">"${r.gatilho}"</div>
+          </div>
+          <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:18px;margin-bottom:12px;">
+            <div style="font-size:12px;font-weight:700;color:${C.navy};margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">❓ Perguntas-Chave</div>
+            ${r.perguntas.map((p, i) => `<div style="display:flex;gap:9px;padding:7px 0;border-bottom:1px solid ${C.gray2};font-family:sans-serif;font-size:12px;"><span style="background:${C.navy};color:${C.gold};border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">${i+1}</span><span style="color:${C.text};line-height:1.5;">${p}</span></div>`).join("")}
+          </div>
+        </div>
+        <div>
+          <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:18px;margin-bottom:12px;">
+            <div style="font-size:12px;font-weight:700;color:${C.navy};margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">📋 Orientação ao Cliente</div>
+            <div style="font-family:sans-serif;font-size:12px;color:${C.text};line-height:1.7;">${r.orientacao}</div>
+          </div>
+          <div style="background:linear-gradient(135deg,${C.navy},#1a3a5c);border-radius:11px;padding:18px;">
+            <div style="font-size:12px;font-weight:700;color:${C.gold};margin-bottom:10px;">🎯 Call to Action</div>
+            <div style="font-family:sans-serif;font-size:13px;color:#fff;line-height:1.7;font-style:italic;">"${r.cta}"</div>
+          </div>
+          <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:18px;margin-top:12px;">
+            <div style="font-size:12px;font-weight:700;color:${C.navy};margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">🤖 Gerar Roteiro Personalizado com IA</div>
+            <textarea id="rot-custom" rows="3" placeholder="Descreva detalhes específicos do cliente para personalizar o roteiro..." style="width:100%;padding:8px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;resize:vertical;box-sizing:border-box;margin-bottom:8px;"></textarea>
+            <button id="rot-ia" style="width:100%;padding:9px;background:${C.gold};color:${C.navy};border:none;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;">🤖 Personalizar com IA</button>
+            <div id="rot-ia-out" style="margin-top:10px;font-family:sans-serif;font-size:12px;line-height:1.7;color:${C.text};white-space:pre-wrap;"></div>
+          </div>
+        </div>
+      </div>`;
+
+      document.getElementById("voltar-sub").onclick = () => { etapa = "area"; draw(); };
+
+      document.getElementById("copiar-rot").onclick = () => {
+        const txt = `ROTEIRO — ${subareaSel} (${areaSel})\n\n` +
+          `ABERTURA:\n"${r.gatilho}"\n\n` +
+          `PERGUNTAS-CHAVE:\n${r.perguntas.map((p,i) => `${i+1}. ${p}`).join("\n")}\n\n` +
+          `ORIENTAÇÃO:\n${r.orientacao}\n\n` +
+          `CALL TO ACTION:\n"${r.cta}"`;
+        navigator.clipboard?.writeText(txt);
+        document.getElementById("copiar-rot").textContent = "✅ Copiado!";
+        setTimeout(() => document.getElementById("copiar-rot").textContent = "📋 Copiar Roteiro", 2000);
+      };
+
+      document.getElementById("rot-ia").onclick = async () => {
+        const custom = document.getElementById("rot-custom").value;
+        if (!custom.trim()) return alert("Descreva o contexto do cliente.");
+        document.getElementById("rot-ia").textContent = "Gerando...";
+        const out = document.getElementById("rot-ia-out");
+        out.textContent = "⏳ Aguarde...";
+        try {
+          const r2 = await apiIA(
+            `Você é especialista em captação jurídica com linguagem empática. Com base no roteiro de ${subareaSel} da área ${areaSel}, crie um atendimento personalizado.`,
+            [{ role: "user", content: `Detalhes do cliente: ${custom}\n\nCrie um roteiro personalizado com: abertura empática, perguntas específicas, orientação jurídica inicial e call to action.` }]
+          );
+          out.textContent = r2;
+        } catch (e) { out.textContent = "❌ " + e.message; }
+        document.getElementById("rot-ia").textContent = "🤖 Personalizar com IA";
+      };
+    }
+  }
+  draw();
+}
+
+// ═══════════════════════════════════════
+// CAPTAÇÃO VIA WHATSAPP
+// ═══════════════════════════════════════
+function pgCaptacao(el) {
+  el.innerHTML = `
+  <div style="margin-bottom:18px;">
+    <h1 style="font-size:22px;color:${C.navy};">📱 Captação via WhatsApp</h1>
+    <p style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-top:3px;">Vincule o WhatsApp do escritório e use o bot para captação automática</p>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;">
+      <div style="font-size:13px;font-weight:700;color:${C.navy};margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid ${C.gray2};">📡 Status da Conexão</div>
+      <div id="wa-status-box" style="text-align:center;padding:20px;background:${C.cream};border-radius:9px;margin-bottom:14px;">
+        <div id="wa-icon" style="font-size:36px;margin-bottom:8px;">📵</div>
+        <div id="wa-status-txt" style="font-family:sans-serif;font-weight:700;color:${C.navy};font-size:14px;">Desconectado</div>
+        <div id="wa-qr-box" style="margin-top:12px;"></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button id="wa-iniciar" style="flex:1;padding:10px;background:${C.gold};color:${C.navy};border:none;border-radius:8px;font-weight:700;cursor:pointer;">▶ Conectar</button>
+        <button id="wa-parar" style="flex:1;padding:10px;background:rgba(192,57,43,.1);color:${C.red};border:1px solid rgba(192,57,43,.2);border-radius:8px;font-weight:700;cursor:pointer;">⏹ Desconectar</button>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;">
+      <div style="font-size:13px;font-weight:700;color:${C.navy};margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid ${C.gray2};">📋 Como usar</div>
+      <div style="font-family:sans-serif;font-size:12px;color:${C.text};line-height:2;">
+        <div>1. Clique em <strong>Conectar</strong></div>
+        <div>2. Escaneie o QR Code com o WhatsApp do escritório</div>
+        <div>3. O bot responderá automaticamente a consultas</div>
+      </div>
+      <div style="margin-top:14px;padding:12px;background:rgba(201,168,76,.08);border-radius:8px;">
+        <div style="font-size:11px;font-weight:700;color:${C.gold3};margin-bottom:8px;">COMANDOS DO BOT:</div>
+        ${[
+          ["/juridico [dúvida]", "Consulta jurídica com IA"],
+          ["/adv [dúvida]", "Alternativa ao /juridico"],
+          ["Oi HJADV", "Menu de boas-vindas"],
+          ["Olá HJADV", "Menu de boas-vindas"]
+        ].map(([cmd, desc]) => `
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(201,168,76,.15);">
+          <code style="font-size:11px;color:${C.navy};background:${C.gray2};padding:2px 6px;border-radius:4px;">${cmd}</code>
+          <span style="font-size:11px;color:${C.gray};">${desc}</span>
+        </div>`).join("")}
+      </div>
+      <div style="margin-top:12px;padding:10px;background:rgba(26,122,74,.08);border-radius:8px;font-family:sans-serif;font-size:11px;color:${C.green};line-height:1.6;">
+        ✅ O bot responde 24h automaticamente usando a IA Gemini integrada ao seu escritório.
+      </div>
+    </div>
+  </div>`;
+
+  // Socket.io para status em tempo real
+  if (window._io_cap) { window._io_cap.disconnect(); }
+  try {
+    window._io_cap = io();
+    window._io_cap.emit("wa_join", { cliente_id: SESS.cliente_id });
+    window._io_cap.on("wa_status", ({ status, qr }) => atualizarStatusWA(status, qr));
+  } catch(e) {}
+
+  // Carregar status inicial
+  fetch("/api/whatsapp/status", { headers: { "cliente_id": SESS.cliente_id, "token": SESS.token } })
+    .then(r => r.json()).then(d => atualizarStatusWA(d.status, d.qr)).catch(() => {});
+
+  function atualizarStatusWA(status, qr) {
+    const icon = document.getElementById("wa-icon");
+    const txt = document.getElementById("wa-status-txt");
+    const qrbox = document.getElementById("wa-qr-box");
+    if (!icon) return;
+    if (status === "conectado") {
+      icon.textContent = "✅"; txt.textContent = "Conectado";
+      txt.style.color = C.green; qrbox.innerHTML = "";
+    } else if (status === "aguardando_qr" && qr) {
+      icon.textContent = "📷"; txt.textContent = "Escaneie o QR Code";
+      txt.style.color = C.navy;
+      qrbox.innerHTML = `<div style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-bottom:8px;">Abra o WhatsApp → Menu → Aparelhos conectados → Conectar aparelho</div><img src="${qr}" style="width:180px;height:180px;border-radius:8px;" onerror="this.style.display='none'"/>`;
+    } else {
+      icon.textContent = "📵"; txt.textContent = "Desconectado";
+      txt.style.color = C.gray; qrbox.innerHTML = "";
+    }
+  }
+
+  document.getElementById("wa-iniciar").onclick = async () => {
+    document.getElementById("wa-iniciar").textContent = "Conectando...";
+    try {
+      await fetch("/api/whatsapp/iniciar", { method: "POST", headers: { "cliente_id": SESS.cliente_id, "token": SESS.token } });
+      document.getElementById("wa-status-txt").textContent = "Aguardando QR...";
+    } catch(e) { alert("Erro ao conectar."); }
+    document.getElementById("wa-iniciar").textContent = "▶ Conectar";
+  };
+
+  document.getElementById("wa-parar").onclick = async () => {
+    await fetch("/api/whatsapp/parar", { method: "POST", headers: { "cliente_id": SESS.cliente_id, "token": SESS.token } });
+  };
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════
+// MÓDULO CLIENTES DO ESCRITÓRIO
+// ═══════════════════════════════════════
+function pgClientes(el) {
+  let busca = "", clienteSel = null, aba = "lista";
+
+  function draw() {
+    if (aba === "lista") drawLista();
+    else if (aba === "ficha") drawFicha();
+  }
+
+  function drawLista() {
+    const fil = (DB.clientes || []).filter(c =>
+      !busca || c.nome.toLowerCase().includes(busca.toLowerCase()) ||
+      (c.cpf || "").includes(busca) || (c.email || "").toLowerCase().includes(busca.toLowerCase())
+    );
+    el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div>
+        <h1 style="font-size:22px;color:${C.navy};">👤 Clientes</h1>
+        <p style="font-family:sans-serif;font-size:10px;color:${C.gray};margin-top:2px;">Cadastro e briefing dos clientes do escritório</p>
+      </div>
+      ${btn("+ Novo Cliente", "cli-novo")}
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <input id="cli-busca" placeholder="Buscar por nome, CPF ou e-mail..." value="${busca}"
+        style="flex:1;padding:9px 12px;border:1.5px solid ${C.gray2};border-radius:8px;font-size:13px;font-family:sans-serif;outline:none;"/>
+    </div>
+    ${fil.length === 0 ? `
+    <div style="text-align:center;padding:40px;background:#fff;border-radius:11px;border:1px solid ${C.gray2};">
+      <div style="font-size:36px;margin-bottom:10px;">👤</div>
+      <div style="font-family:sans-serif;font-size:14px;color:${C.gray};">Nenhum cliente cadastrado ainda.</div>
+      <div style="font-family:sans-serif;font-size:12px;color:${C.gray};margin-top:4px;">Clique em "+ Novo Cliente" para começar.</div>
+    </div>` : `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+      ${fil.map(c => {
+        const procs = (DB.processos || []).filter(p => p.cli === c.nome).length;
+        const briefs = (c.briefings || []).length;
+        const statusC = c.status === "Ativo" ? C.green : c.status === "Inativo" ? C.gray : C.orange;
+        return `
+        <div data-cli="${c.id}" style="background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:18px;cursor:pointer;transition:.15s;"
+          onmouseover="this.style.borderColor='${C.gold}'" onmouseout="this.style.borderColor='${C.gray2}'">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+            <div style="width:40px;height:40px;border-radius:50%;background:${C.navy};display:flex;align-items:center;justify-content:center;font-size:16px;color:${C.gold};font-weight:800;flex-shrink:0;">
+              ${c.nome.charAt(0).toUpperCase()}
+            </div>
+            <span style="background:${statusC}18;color:${statusC};border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;">${c.status || "Ativo"}</span>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:${C.navy};margin-bottom:3px;">${c.nome}</div>
+          <div style="font-family:sans-serif;font-size:11px;color:${C.gray};margin-bottom:8px;">${c.email || "—"} ${c.tel ? "· " + c.tel : ""}</div>
+          <div style="display:flex;gap:8px;">
+            <div style="flex:1;background:${C.cream};border-radius:6px;padding:6px;text-align:center;">
+              <div style="font-size:16px;font-weight:800;color:${C.navy};">${procs}</div>
+              <div style="font-size:9px;color:${C.gray};font-family:sans-serif;">Processos</div>
+            </div>
+            <div style="flex:1;background:${C.cream};border-radius:6px;padding:6px;text-align:center;">
+              <div style="font-size:16px;font-weight:800;color:${C.navy};">${briefs}</div>
+              <div style="font-size:9px;color:${C.gray};font-family:sans-serif;">Briefings</div>
+            </div>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`}`;
+
+    document.getElementById("cli-busca").oninput = e => { busca = e.target.value; drawLista(); };
+    document.getElementById("cli-novo").onclick = () => abrirFormCliente(null, draw);
+    document.querySelectorAll("[data-cli]").forEach(b => {
+      b.onclick = () => {
+        clienteSel = (DB.clientes || []).find(c => c.id == b.dataset.cli);
+        aba = "ficha"; draw();
+      };
+    });
+  }
+
+  function drawFicha() {
+    if (!clienteSel) { aba = "lista"; draw(); return; }
+    const c = (DB.clientes || []).find(x => x.id === clienteSel.id) || clienteSel;
+    const procs = (DB.processos || []).filter(p => p.cli === c.nome);
+    const fins = (DB.financeiro || []).filter(f => f.cli === c.nome);
+    const totalHon = fins.filter(f => f.valor > 0).reduce((a, f) => a + f.valor, 0);
+
+    el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+      <button id="cli-voltar" style="padding:6px 12px;background:transparent;border:1.5px solid ${C.gray2};border-radius:7px;cursor:pointer;font-size:12px;">← Clientes</button>
+      <div style="flex:1;">
+        <h1 style="font-size:20px;color:${C.navy};">${c.nome}</h1>
+        <p style="font-family:sans-serif;font-size:11px;color:${C.gray};">${c.area || "Área não definida"} · ${c.status || "Ativo"}</p>
+      </div>
+      <div style="display:flex;gap:6px;">
+        ${btn("✏️ Editar", "cli-editar", "ghost")}
+        ${btn("+ Briefing", "cli-novo-brief")}
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:16px;">
+      ${[
+        {l:"Processos", v:procs.length, i:"📋"},
+        {l:"Total Honorários", v:fmtR(totalHon), i:"💰"},
+        {l:"Briefings", v:(c.briefings||[]).length, i:"📝"}
+      ].map(x => `
+      <div style="background:#fff;border-radius:9px;border:1px solid ${C.gray2};padding:12px 14px;display:flex;align-items:center;gap:9px;">
+        <div style="width:32px;height:32px;border-radius:7px;background:${C.navy}18;display:flex;align-items:center;justify-content:center;font-size:15px;">${x.i}</div>
+        <div><div style="font-size:15px;font-weight:800;color:${C.navy};">${x.v}</div><div style="font-size:9px;color:${C.gray};font-family:sans-serif;">${x.l}</div></div>
+      </div>`).join("")}
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+
+      <!-- DADOS DO CLIENTE -->
+      ${card(`
+        <div style="font-size:13px;font-weight:700;color:${C.navy};margin-bottom:12px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">📋 Dados do Cliente</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-family:sans-serif;font-size:12px;">
+          ${[
+            ["CPF/CNPJ", c.cpf||"—"],["E-mail", c.email||"—"],["Telefone", c.tel||"—"],
+            ["Endereço", c.end||"—"],["Profissão", c.prof||"—"],["Como chegou", c.origem||"—"]
+          ].map(([l,v]) => `<div><div style="font-size:10px;color:${C.gray};text-transform:uppercase;font-weight:700;margin-bottom:2px;">${l}</div><div style="color:${C.text};">${v}</div></div>`).join("")}
+        </div>
+        ${c.obs ? `<div style="margin-top:12px;padding:10px;background:${C.cream};border-radius:7px;font-family:sans-serif;font-size:12px;color:${C.text};line-height:1.6;"><strong>Observações:</strong> ${c.obs}</div>` : ""}
+      `)}
+
+      <!-- PROCESSOS VINCULADOS -->
+      ${card(`
+        <div style="font-size:13px;font-weight:700;color:${C.navy};margin-bottom:12px;padding-bottom:7px;border-bottom:1px solid ${C.gray2};">📋 Processos Vinculados</div>
+        ${procs.length === 0
+          ? `<div style="font-family:sans-serif;font-size:12px;color:${C.gray};text-align:center;padding:16px;">Nenhum processo vinculado.</div>`
+          : procs.map(p => `
+          <div style="padding:8px;background:${C.cream};border-radius:7px;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:700;color:${C.navy};">${p.area} — ${p.status}</div>
+            <div style="font-size:10px;color:${C.gray};font-family:sans-serif;margin-top:2px;">${p.num || "Nº não informado"}</div>
+          </div>`).join("")}
+      `)}
+    </div>
+
+    <!-- BRIEFINGS -->
+    <div style="margin-top:14px;background:#fff;border-radius:11px;border:1px solid ${C.gray2};padding:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid ${C.gray2};">
+        <div style="font-size:13px;font-weight:700;color:${C.navy};">📝 Briefings e Histórico do Caso</div>
+        ${btn("+ Novo Briefing", "cli-novo-brief2")}
+      </div>
+      ${(c.briefings || []).length === 0
+        ? `<div style="text-align:center;padding:24px;font-family:sans-serif;font-size:13px;color:${C.gray};">Nenhum briefing registrado. Clique em "+ Novo Briefing" para começar.</div>`
+        : [...(c.briefings || [])].reverse().map((b, i) => `
+        <div style="border:1px solid ${C.gray2};border-radius:9px;padding:14px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:${C.navy};">${b.titulo}</div>
+              <div style="font-size:10px;color:${C.gray};font-family:sans-serif;margin-top:2px;">${fmtD(b.data)} · ${b.tipo || "Anotação"}</div>
+            </div>
+            <button data-delbref="${b.id}" style="padding:3px 8px;background:rgba(192,57,43,.1);color:${C.red};border:1px solid rgba(192,57,43,.2);border-radius:5px;cursor:pointer;font-size:11px;">×</button>
+          </div>
+          <div style="font-family:sans-serif;font-size:12px;color:${C.text};line-height:1.7;white-space:pre-wrap;">${b.conteudo}</div>
+          ${b.docs ? `<div style="margin-top:8px;padding:7px 10px;background:${C.cream};border-radius:6px;font-family:sans-serif;font-size:11px;color:${C.gray};"><strong>Documentos:</strong> ${b.docs}</div>` : ""}
+        </div>`).join("")}
+    </div>`;
+
+    document.getElementById("cli-voltar").onclick = () => { aba = "lista"; draw(); };
+    document.getElementById("cli-editar").onclick = () => abrirFormCliente(c, () => {
+      clienteSel = (DB.clientes || []).find(x => x.id === c.id);
+      drawFicha();
+    });
+    const btnBrief = document.getElementById("cli-novo-brief") || document.getElementById("cli-novo-brief2");
+    [document.getElementById("cli-novo-brief"), document.getElementById("cli-novo-brief2")].forEach(b => {
+      if (b) b.onclick = () => abrirFormBriefing(c, drawFicha);
+    });
+    document.querySelectorAll("[data-delbref]").forEach(b => {
+      b.onclick = () => {
+        if (!confirm("Excluir este briefing?")) return;
+        const cli = DB.clientes.find(x => x.id === c.id);
+        if (cli) cli.briefings = (cli.briefings || []).filter(bf => bf.id != b.dataset.delbref);
+        saveDB(); drawFicha();
+      };
+    });
+  }
+
+  draw();
+}
+
+function abrirFormCliente(obj, cb) {
+  const isEdit = !!obj;
+  const body = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      ${inp("Nome Completo *", "fcli-nome", "text", obj?.nome || "")}
+      ${inp("CPF / CNPJ", "fcli-cpf", "text", obj?.cpf || "", "000.000.000-00")}
+      ${inp("E-mail", "fcli-email", "email", obj?.email || "")}
+      ${inp("Telefone / WhatsApp", "fcli-tel", "text", obj?.tel || "", "(00) 00000-0000")}
+      ${inp("Profissão", "fcli-prof", "text", obj?.prof || "")}
+      ${sel("Como chegou ao escritório", "fcli-origem", ["Indicação","Instagram","Google","WhatsApp","Presencial","Site","Outro"], obj?.origem || "")}
+    </div>
+    ${inp("Endereço", "fcli-end", "text", obj?.end || "")}
+    ${sel("Área do caso", "fcli-area", ["Civil","Penal","Família","Trabalhista","Trânsito","Administrativo","Previdenciário","Outros"], obj?.area || "")}
+    ${sel("Status", "fcli-status", ["Ativo","Em negociação","Inativo","Encerrado"], obj?.status || "Ativo")}
+    <div style="margin-bottom:11px;"><label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;">Observações Gerais</label><textarea id="fcli-obs" rows="3" style="width:100%;padding:8px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;resize:vertical;box-sizing:border-box;">${obj?.obs || ""}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      ${btn("Cancelar", "fcli-cancl", "ghost")}
+      ${btn(isEdit ? "Salvar" : "Cadastrar", "fcli-save")}
+    </div>`;
+
+  openModal(modal("fcliente", isEdit ? "Editar Cliente" : "Novo Cliente", body, 560));
+  document.getElementById("fcli-cancl").onclick = () => document.getElementById("fcliente-overlay").remove();
+  document.getElementById("fcli-save").onclick = () => {
+    const nome = document.getElementById("fcli-nome").value.trim();
+    if (!nome) return alert("Nome é obrigatório.");
+    const dados = {
+      nome, cpf: document.getElementById("fcli-cpf").value,
+      email: document.getElementById("fcli-email").value,
+      tel: document.getElementById("fcli-tel").value,
+      prof: document.getElementById("fcli-prof").value,
+      origem: document.getElementById("fcli-origem").value,
+      end: document.getElementById("fcli-end").value,
+      area: document.getElementById("fcli-area").value,
+      status: document.getElementById("fcli-status").value,
+      obs: document.getElementById("fcli-obs").value,
+    };
+    if (!DB.clientes) DB.clientes = [];
+    if (isEdit) {
+      const idx = DB.clientes.findIndex(x => x.id === obj.id);
+      if (idx !== -1) DB.clientes[idx] = { ...DB.clientes[idx], ...dados };
+    } else {
+      DB.clientes.push({ id: uid(), ...dados, briefings: [], criado_em: new Date().toISOString().split("T")[0] });
+    }
+    saveDB();
+    document.getElementById("fcliente-overlay").remove();
+    cb();
+  };
+}
+
+function abrirFormBriefing(cliente, cb) {
+  const body = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      ${inp("Título do Briefing *", "fbrf-titulo", "text", "", "Ex: Primeira consulta, Reunião 10/04...")}
+      ${inp("Data *", "fbrf-data", "date")}
+    </div>
+    ${sel("Tipo", "fbrf-tipo", ["Primeira consulta","Reunião","Atualização do caso","Documentos recebidos","Decisão judicial","Audiência","Anotação geral"], "Primeira consulta")}
+    <div style="margin-bottom:11px;">
+      <label style="display:block;font-size:10px;font-weight:700;color:${C.navy};margin-bottom:4px;font-family:sans-serif;text-transform:uppercase;">Conteúdo / Histórico *</label>
+      <textarea id="fbrf-conteudo" rows="7" placeholder="Descreva o histórico do caso, o que foi discutido, decisões tomadas, próximos passos..." style="width:100%;padding:9px 10px;border:1.5px solid ${C.gray2};border-radius:7px;font-size:12px;font-family:sans-serif;outline:none;resize:vertical;box-sizing:border-box;line-height:1.6;"></textarea>
+    </div>
+    ${inp("Documentos recebidos/enviados", "fbrf-docs", "text", "", "Ex: RG, CPF, contrato de honorários, procuração...")}
+    <div style="display:flex;gap:7px;margin-bottom:11px;">
+      ${btn("🤖 Resumir com IA", "fbrf-ia", "ghost")}
+      <div id="fbrf-ia-status" style="font-family:sans-serif;font-size:11px;color:${C.gray};padding:8px 0;"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      ${btn("Cancelar", "fbrf-cancl", "ghost")}
+      ${btn("Salvar Briefing", "fbrf-save")}
+    </div>`;
+
+  openModal(modal("fbriefing", `📝 Briefing — ${cliente.nome}`, body, 560));
+  document.getElementById("fbrf-cancl").onclick = () => document.getElementById("fbriefing-overlay").remove();
+
+  document.getElementById("fbrf-ia").onclick = async () => {
+    const conteudo = document.getElementById("fbrf-conteudo").value;
+    if (!conteudo.trim()) return alert("Escreva o conteúdo primeiro.");
+    document.getElementById("fbrf-ia-status").textContent = "Resumindo...";
+    try {
+      const r = await apiIA(
+        "Você é assistente jurídico. Resuma e organize o briefing de forma profissional.",
+        [{ role: "user", content: `Organize e resuma este briefing de atendimento jurídico:\n\n${conteudo}` }]
+      );
+      document.getElementById("fbrf-conteudo").value = r;
+      document.getElementById("fbrf-ia-status").textContent = "✅ Resumido!";
+    } catch (e) {
+      document.getElementById("fbrf-ia-status").textContent = "❌ Erro: " + e.message;
+    }
+  };
+
+  document.getElementById("fbrf-save").onclick = () => {
+    const titulo = document.getElementById("fbrf-titulo").value.trim();
+    const conteudo = document.getElementById("fbrf-conteudo").value.trim();
+    const data = document.getElementById("fbrf-data").value;
+    if (!titulo || !conteudo || !data) return alert("Título, data e conteúdo são obrigatórios.");
+    if (!DB.clientes) DB.clientes = [];
+    const cli = DB.clientes.find(x => x.id === cliente.id);
+    if (!cli) return;
+    if (!cli.briefings) cli.briefings = [];
+    cli.briefings.push({
+      id: uid(), titulo, data,
+      tipo: document.getElementById("fbrf-tipo").value,
+      conteudo, docs: document.getElementById("fbrf-docs").value
+    });
+    saveDB();
+    document.getElementById("fbriefing-overlay").remove();
+    cb();
+  };
+}
+</script>

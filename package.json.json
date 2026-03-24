@@ -1,0 +1,20 @@
+{
+  "name": "hjadv",
+  "version": "3.0.0",
+  "description": "HJ ADV — Escritório Digital com Licenciamento",
+  "main": "server .js",
+  "scripts": {
+    "start": "node server .js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "better-sqlite3": "^9.4.3",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "qrcode": "^1.5.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
